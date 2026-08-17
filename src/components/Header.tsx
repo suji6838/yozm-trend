@@ -14,10 +14,10 @@ export default function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-zinc-100 bg-white">
+    <header className="sticky top-0 z-10 border-b border-zinc-100 bg-white/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-bold text-white shadow-sm">
             Y
           </span>
           <span className="text-base font-semibold text-zinc-900">

@@ -21,6 +21,22 @@ export const CATEGORY_STYLES: Record<Category, string> = {
   "마케팅/비즈니스": "bg-rose-50 text-rose-600",
 };
 
+export const CATEGORY_ICONS: Record<Category, string> = {
+  "AI/테크": "🤖",
+  "금융/투자": "💰",
+  "건강/뷰티": "💆",
+  "소비/라이프": "🛍️",
+  "마케팅/비즈니스": "📈",
+};
+
+export const CATEGORY_ACCENT: Record<Category, string> = {
+  "AI/테크": "from-blue-500 to-sky-400",
+  "금융/투자": "from-violet-500 to-purple-400",
+  "건강/뷰티": "from-green-500 to-emerald-400",
+  "소비/라이프": "from-amber-500 to-orange-400",
+  "마케팅/비즈니스": "from-rose-500 to-pink-400",
+};
+
 export type Trend = {
   id: string;
   category: Category;
