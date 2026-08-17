@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CATEGORIES, Category, DATA_SOURCES, Trend } from "@/data/trends";
+import { CATEGORIES, Category, Trend } from "@/data/trends";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
 
@@ -77,38 +77,6 @@ export default function HomeClient({ trends }: { trends: Trend[] }) {
             {category}
           </button>
         ))}
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-zinc-100 bg-zinc-50 p-5">
-        <p className="text-xs font-semibold tracking-wide text-zinc-400">
-          DAILY DATA SOURCES
-        </p>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-medium text-zinc-700">
-            매일 오전 7시 업데이트 예정
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {DATA_SOURCES.map((source) => (
-              <span
-                key={source.name}
-                className={
-                  source.connected
-                    ? "flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-600"
-                    : "flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-400"
-                }
-              >
-                {source.connected && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                )}
-                {source.name}
-              </span>
-            ))}
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-zinc-400">
-          네이버 뉴스 · DataLab은 실시간 API로 연결되어 있어요. 나머지
-          출처는 사용 권한이 연결되면 추가될 예정입니다.
-        </p>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
