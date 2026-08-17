@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Trend } from "@/data/trends";
-
-const SAVED_STORAGE_KEY = "yozm-trend-saved-v2";
+import { SAVED_STORAGE_KEY } from "@/lib/storageKeys";
 
 export function useSavedTrends() {
   const [savedTrends, setSavedTrends] = useState<Trend[]>([]);
