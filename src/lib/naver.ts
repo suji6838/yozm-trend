@@ -41,12 +41,14 @@ export type DatalabTrendResult = {
 
 import { CATEGORIES, Category, Trend } from "@/data/trends";
 
-const CATEGORY_QUERIES: Record<Category, string> = {
-  "AI/테크": "AI",
-  "금융/투자": "재테크",
-  "건강/뷰티": "건강 뷰티",
-  "소비/라이프": "소비 트렌드",
-  "마케팅/비즈니스": "마케팅",
+const PER_CATEGORY_COUNT = 3;
+
+const CATEGORY_QUERIES: Record<Category, string[]> = {
+  "AI/테크": ["AI"],
+  "금융/투자": ["국내증시", "해외증시 ETF"],
+  "건강/뷰티": ["건강 뷰티"],
+  "소비/라이프": ["소비 트렌드"],
+  "마케팅/비즈니스": ["마케팅"],
 };
 
 function decodeHtmlEntities(text: string) {
@@ -76,8 +78,24 @@ function sourceFromLink(link: string) {
 export async function getDailyTrends(): Promise<Trend[]> {
   const perCategory = await Promise.all(
     CATEGORIES.map(async (category) => {
-      const items = await searchNaverNews(CATEGORY_QUERIES[category], 2);
-      return items.map(
+      const queries = CATEGORY_QUERIES[category];
+      const resultsPerQuery = await Promise.all(
+        queries.map((query) => searchNaverNews(query, PER_CATEGORY_COUNT)),
+      );
+
+      const seenLinks = new Set<string>();
+      const deduped = resultsPerQuery.flat().filter((item) => {
+        const key = item.originallink || item.link;
+        if (seenLinks.has(key)) return false;
+        seenLinks.add(key);
+        return true;
+      });
+
+      deduped.sort(
+        (a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime(),
+      );
+
+      return deduped.slice(0, PER_CATEGORY_COUNT).map(
         (item, index): Trend => ({
           id: `${category}-${index}-${item.link}`,
           category,
