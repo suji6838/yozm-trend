@@ -15,7 +15,9 @@ export default function SubscribeClient() {
   const requiredForSave = searchParams.get("required") === "save";
   const [email, setEmail] = useState("");
   const [categories, setCategories] = useState<Category[]>([...CATEGORIES]);
-  const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle",
+  );
 
   useEffect(() => {
     const raw = window.localStorage.getItem(SUBSCRIPTION_STORAGE_KEY);
@@ -32,17 +34,30 @@ export default function SubscribeClient() {
         ? prev.filter((c) => c !== category)
         : [...prev, category],
     );
-    setSaved(false);
+    setStatus("idle");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const subscription: Subscription = { email, categories };
-    window.localStorage.setItem(
-      SUBSCRIPTION_STORAGE_KEY,
-      JSON.stringify(subscription),
-    );
-    setSaved(true);
+    setStatus("saving");
+    try {
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      const subscription: Subscription = { email, categories };
+      window.localStorage.setItem(
+        SUBSCRIPTION_STORAGE_KEY,
+        JSON.stringify(subscription),
+      );
+      setStatus("saved");
+    } catch (error) {
+      console.error("Failed to save subscriber:", error);
+      setStatus("error");
+    }
   };
 
   return (
@@ -70,7 +85,7 @@ export default function SubscribeClient() {
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
-            setSaved(false);
+            setStatus("idle");
           }}
           placeholder="you@example.com"
           className="mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-blue-400"
@@ -101,20 +116,26 @@ export default function SubscribeClient() {
 
         <button
           type="submit"
-          className="mt-8 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+          disabled={status === "saving"}
+          className="mt-8 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
         >
-          저장하기
+          {status === "saving" ? "저장 중..." : "저장하기"}
         </button>
 
-        {saved && (
+        {status === "saved" && (
           <p className="mt-3 text-center text-sm text-blue-600">
-            설정이 저장됐어요.
+            구독 설정이 저장됐어요.
+          </p>
+        )}
+        {status === "error" && (
+          <p className="mt-3 text-center text-sm text-red-500">
+            저장에 실패했어요. 잠시 후 다시 시도해주세요.
           </p>
         )}
 
         <p className="mt-4 text-xs text-zinc-400">
-          지금은 이 브라우저에만 설정이 저장돼요. 실제 이메일 발송 기능은 아직
-          연결되어 있지 않습니다.
+          이메일은 구독자 목록에 저장돼요. 관심 카테고리는 아직 이 브라우저에만
+          저장되고, 실제 이메일 발송 기능은 이번 범위 밖입니다.
         </p>
       </form>
     </main>
