@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { CATEGORIES, Category, Trend } from "@/data/trends";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
-import { useSubscription } from "@/hooks/useSubscription";
 import TrendCard from "./TrendCard";
 
 function formatTodayLabel() {
@@ -14,21 +12,11 @@ function formatTodayLabel() {
 }
 
 export default function HomeClient({ trends }: { trends: Trend[] }) {
-  const router = useRouter();
   const [bannerOpen, setBannerOpen] = useState(true);
   const [activeCategory, setActiveCategory] = useState<Category | "전체">(
     "전체",
   );
   const { savedIds, toggleSave } = useSavedTrends();
-  const { isSubscribed } = useSubscription();
-
-  const handleToggleSave = (trend: Trend) => {
-    if (!isSubscribed) {
-      router.push("/subscribe?required=save");
-      return;
-    }
-    toggleSave(trend);
-  };
 
   const filteredTrends = useMemo(
     () =>
@@ -97,7 +85,7 @@ export default function HomeClient({ trends }: { trends: Trend[] }) {
             key={trend.id}
             trend={trend}
             saved={savedIds.includes(trend.id)}
-            onToggleSave={handleToggleSave}
+            onToggleSave={toggleSave}
           />
         ))}
       </div>

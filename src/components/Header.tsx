@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Show, UserButton } from "@clerk/nextjs";
 
 const NAV_ITEMS = [
   { href: "/", label: "오늘의 트렌드" },
@@ -41,6 +42,20 @@ export default function Header() {
               </Link>
             );
           })}
+
+          <div className="ml-2 flex items-center border-l border-zinc-100 pl-3">
+            <Show when="signed-out">
+              <Link
+                href="/sign-in"
+                className="rounded-full bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700"
+              >
+                로그인
+              </Link>
+            </Show>
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
+          </div>
         </nav>
       </div>
     </header>

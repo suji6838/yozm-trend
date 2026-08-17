@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { CATEGORIES, Category } from "@/data/trends";
 import { SUBSCRIPTION_STORAGE_KEY } from "@/lib/storageKeys";
 
@@ -11,8 +10,6 @@ type Subscription = {
 };
 
 export default function SubscribeClient() {
-  const searchParams = useSearchParams();
-  const requiredForSave = searchParams.get("required") === "save";
   const [email, setEmail] = useState("");
   const [categories, setCategories] = useState<Category[]>([...CATEGORIES]);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
@@ -66,12 +63,6 @@ export default function SubscribeClient() {
       <p className="mt-2 text-sm text-zinc-500">
         관심 카테고리를 골라두면 그 분야 위주로 트렌드를 보여드릴게요.
       </p>
-
-      {requiredForSave && (
-        <div className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
-          저장 기능은 구독 설정을 먼저 완료해야 사용할 수 있어요.
-        </div>
-      )}
 
       <form
         onSubmit={handleSubmit}
