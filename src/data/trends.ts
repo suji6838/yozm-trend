@@ -28,6 +28,7 @@ export type Trend = {
   title: string;
   summary: string;
   source: string;
+  link?: string;
 };
 
 export const TRENDS: Trend[] = [
@@ -105,10 +106,10 @@ export const TRENDS: Trend[] = [
   },
 ];
 
-export const DATA_SOURCES = [
-  "네이버 DataLab",
-  "네이버 뉴스",
-  "Google Trends",
-  "Product Hunt",
-  "Bloomberg",
+export const DATA_SOURCES: { name: string; connected: boolean }[] = [
+  { name: "네이버 DataLab", connected: true },
+  { name: "네이버 뉴스", connected: true },
+  { name: "Google Trends", connected: false },
+  { name: "Product Hunt", connected: false },
+  { name: "Bloomberg", connected: false },
 ];

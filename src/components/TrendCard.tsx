@@ -5,7 +5,7 @@ import { CATEGORY_STYLES, Trend } from "@/data/trends";
 type Props = {
   trend: Trend;
   saved: boolean;
-  onToggleSave: (id: string) => void;
+  onToggleSave: (trend: Trend) => void;
 };
 
 export default function TrendCard({ trend, saved, onToggleSave }: Props) {
@@ -21,7 +21,18 @@ export default function TrendCard({ trend, saved, onToggleSave }: Props) {
           <span className="text-xs text-zinc-400">{trend.publishedDate}</span>
         </div>
         <h3 className="mb-2 text-base font-semibold leading-snug text-zinc-900">
-          {trend.title}
+          {trend.link ? (
+            <a
+              href={trend.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              {trend.title}
+            </a>
+          ) : (
+            trend.title
+          )}
         </h3>
         <p className="text-sm leading-relaxed text-zinc-500">
           {trend.summary}
@@ -31,7 +42,7 @@ export default function TrendCard({ trend, saved, onToggleSave }: Props) {
         <span className="text-xs text-zinc-400">출처 · {trend.source}</span>
         <button
           type="button"
-          onClick={() => onToggleSave(trend.id)}
+          onClick={() => onToggleSave(trend)}
           className={
             saved
               ? "flex items-center gap-1 text-xs font-medium text-amber-500"

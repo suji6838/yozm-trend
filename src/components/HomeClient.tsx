@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CATEGORIES, Category, DATA_SOURCES, TRENDS } from "@/data/trends";
+import { useMemo, useState } from "react";
+import { CATEGORIES, Category, DATA_SOURCES, Trend } from "@/data/trends";
+import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
-
-const SAVED_STORAGE_KEY = "yozm-trend-saved";
 
 function formatTodayLabel() {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
@@ -12,34 +11,19 @@ function formatTodayLabel() {
   return `${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
 }
 
-export default function HomeClient() {
+export default function HomeClient({ trends }: { trends: Trend[] }) {
   const [bannerOpen, setBannerOpen] = useState(true);
   const [activeCategory, setActiveCategory] = useState<Category | "전체">(
     "전체",
   );
-  const [savedIds, setSavedIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    const raw = window.localStorage.getItem(SAVED_STORAGE_KEY);
-    if (raw) setSavedIds(JSON.parse(raw));
-  }, []);
-
-  const toggleSave = (id: string) => {
-    setSavedIds((prev) => {
-      const next = prev.includes(id)
-        ? prev.filter((savedId) => savedId !== id)
-        : [...prev, id];
-      window.localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  };
+  const { savedIds, toggleSave } = useSavedTrends();
 
   const filteredTrends = useMemo(
     () =>
       activeCategory === "전체"
-        ? TRENDS
-        : TRENDS.filter((t) => t.category === activeCategory),
-    [activeCategory],
+        ? trends
+        : trends.filter((t) => t.category === activeCategory),
+    [activeCategory, trends],
   );
 
   return (
@@ -106,17 +90,24 @@ export default function HomeClient() {
           <div className="flex flex-wrap gap-2">
             {DATA_SOURCES.map((source) => (
               <span
-                key={source}
-                className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-600"
+                key={source.name}
+                className={
+                  source.connected
+                    ? "flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-600"
+                    : "flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-400"
+                }
               >
-                {source}
+                {source.connected && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                )}
+                {source.name}
               </span>
             ))}
           </div>
         </div>
         <p className="mt-2 text-xs text-zinc-400">
-          각 서비스의 공식 API 또는 사용 권한이 연결되면 이 출처를 바탕으로
-          일일 트렌드를 갱신합니다.
+          네이버 뉴스 · DataLab은 실시간 API로 연결되어 있어요. 나머지
+          출처는 사용 권한이 연결되면 추가될 예정입니다.
         </p>
       </div>
 
