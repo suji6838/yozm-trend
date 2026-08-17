@@ -13,9 +13,27 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const title = "요즘트렌드 YOZM Trend";
+const description =
+  "수많은 이야기 중 지금 알아두면 좋은 변화만 간결하게 정리했어요.";
+
 export const metadata: Metadata = {
-  title: "요즘트렌드 YOZM Trend",
-  description: "수많은 이야기 중 지금 알아두면 좋은 변화만 간결하게 정리했어요.",
+  metadataBase: new URL("https://yozm-trend.vercel.app"),
+  title,
+  description,
+  openGraph: {
+    title,
+    description,
+    url: "https://yozm-trend.vercel.app",
+    siteName: title,
+    locale: "ko_KR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
