@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Header from "@/components/Header";
 import HomeClient from "@/components/HomeClient";
 import { TRENDS } from "@/data/trends";
@@ -20,7 +21,9 @@ export default async function Home() {
   return (
     <div className="min-h-screen bg-zinc-50">
       <Header />
-      <HomeClient trends={trends} analysis={analysis} />
+      <Suspense>
+        <HomeClient trends={trends} analysis={analysis} />
+      </Suspense>
     </div>
   );
 }

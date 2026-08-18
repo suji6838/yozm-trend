@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CATEGORIES, CATEGORY_ICONS, Category, Trend } from "@/data/trends";
 import type { DailyAnalysis } from "@/lib/dailyAnalysis";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
@@ -20,9 +21,19 @@ export default function HomeClient({
   trends: Trend[];
   analysis: DailyAnalysis | null;
 }) {
-  const [activeCategory, setActiveCategory] = useState<Category | "전체">(
-    "전체",
-  );
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const categoryParam = searchParams.get("category");
+  const activeCategory: Category | "전체" =
+    categoryParam && (CATEGORIES as string[]).includes(categoryParam)
+      ? (categoryParam as Category)
+      : "전체";
+
+  const setActiveCategory = (category: Category | "전체") => {
+    const href = category === "전체" ? "/" : `/?category=${encodeURIComponent(category)}`;
+    router.replace(href, { scroll: false });
+  };
+
   const { savedIds, toggleSave } = useSavedTrends();
 
   const filteredTrends = useMemo(
