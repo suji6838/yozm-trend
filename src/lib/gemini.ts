@@ -1,7 +1,10 @@
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = "gemini-3.6-flash";
 
-export async function generateWithGemini(prompt: string): Promise<string> {
+export async function generateWithGemini(
+  prompt: string,
+  options?: { jsonSchema?: object },
+): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set");
   }
@@ -11,7 +14,17 @@ export async function generateWithGemini(prompt: string): Promise<string> {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        ...(options?.jsonSchema
+          ? {
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: options.jsonSchema,
+              },
+            }
+          : {}),
+      }),
     },
   );
 

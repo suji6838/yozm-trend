@@ -41,7 +41,7 @@ export default function HomeClient({
 
         {bannerOpen && (
           <div className="relative mb-6 flex items-center justify-between rounded-full bg-white/15 px-4 py-2 text-sm text-white backdrop-blur-sm">
-            <span>✦ 접속할 때마다 네이버 뉴스에서 실시간으로 트렌드를 가져와요.</span>
+            <span>✦ 카테고리 키워드와 AI 분석으로 하루에 한 번 트렌드를 새로 골라드려요.</span>
             <button
               type="button"
               onClick={() => setBannerOpen(false)}

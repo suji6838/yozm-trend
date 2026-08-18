@@ -1,13 +1,13 @@
 import { TRENDS } from "@/data/trends";
-import { getDailyTrends } from "@/lib/naver";
+import { getDailyAnalysis } from "@/lib/dailyAnalysis";
 import { listSubscribers, sendDigestBatch } from "@/lib/resend";
 import { buildDigestEmail } from "@/lib/digestEmail";
 
 export async function runDigestSend() {
   let trends = TRENDS;
   try {
-    const liveTrends = await getDailyTrends();
-    if (liveTrends.length > 0) trends = liveTrends;
+    const analysis = await getDailyAnalysis();
+    if (analysis.trends.length > 0) trends = analysis.trends;
   } catch (error) {
     console.error("send-digest: falling back to static trends:", error);
   }
