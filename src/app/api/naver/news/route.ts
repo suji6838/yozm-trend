@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchNaverNews } from "@/lib/naver";
 
 export async function GET(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const query = req.nextUrl.searchParams.get("query") ?? "AI";
   try {
     const items = await searchNaverNews(query, 10);

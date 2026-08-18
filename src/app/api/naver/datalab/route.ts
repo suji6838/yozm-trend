@@ -6,6 +6,11 @@ function formatDate(d: Date) {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const keyword = req.nextUrl.searchParams.get("keyword") ?? "AI";
 
   const end = new Date();
