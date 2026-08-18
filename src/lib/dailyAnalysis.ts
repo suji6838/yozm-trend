@@ -380,6 +380,6 @@ async function buildDailyAnalysis(): Promise<DailyAnalysis> {
 
 export const getDailyAnalysis = unstable_cache(
   buildDailyAnalysis,
-  ["daily-trend-analysis-v4"],
-  { revalidate: 86400 },
+  ["daily-trend-analysis-v5"],
+  { revalidate: 86400, tags: ["daily-analysis"] },
 );
