@@ -93,7 +93,7 @@ function buildCandidateBlock(candidates: Candidate[]) {
     .join("\n");
 }
 
-// ── 1) 카테고리별 그리드 카드 선정 (기존 로직 유지, 분석 텍스트는 제거) ──
+// ── 그리드 선정 + 트렌드 클러스터링을 Gemini 호출 1번으로 통합 (일일 무료 할당량 절약) ──
 
 function pickWithBackfill(
   selectedIndices: number[],
@@ -130,36 +130,6 @@ function pickWithBackfill(
   return CATEGORIES.flatMap((category) => byCategory[category]);
 }
 
-const GRID_JSON_SCHEMA = {
-  type: "object",
-  properties: {
-    selectedIndices: { type: "array", items: { type: "integer" } },
-  },
-  required: ["selectedIndices"],
-};
-
-async function selectGridTrends(
-  pool: Record<Category, Trend[]>,
-  candidates: Candidate[],
-): Promise<Trend[]> {
-  const prompt = `너는 데일리 트렌드 뉴스레터 에디터야. 아래 카테고리별 포함/제외 기준을 엄격히 적용해서 오늘의 후보 기사 중 카테고리마다 정확히 ${PER_CATEGORY_COUNT}개씩 골라줘.
-제외 기준(단순 실적/인사/주가 변동/보도자료성 기사 등)에 해당하는 기사는 그 카테고리에 후보가 부족해지더라도 절대 고르지 마.
-
-[카테고리별 포함/제외 기준]
-${buildCriteriaBlock()}
-
-[오늘의 후보 기사 목록 (번호) (카테고리) 제목 - 요약 - 출처]
-${buildCandidateBlock(candidates)}
-
-selectedIndices에는 고른 기사들의 번호만 넣어줘.`;
-
-  const raw = await generateWithGemini(prompt, { jsonSchema: GRID_JSON_SCHEMA });
-  const parsed = JSON.parse(raw) as { selectedIndices: number[] };
-  return pickWithBackfill(parsed.selectedIndices ?? [], pool, candidates);
-}
-
-// ── 2) "오늘의 트렌드" 클러스터 분석 ──
-
 export type TrendCluster = {
   title: string;
   oneLineSummary: string;
@@ -183,9 +153,10 @@ type RawTrendCluster = {
   evidenceIndices: number[];
 };
 
-const TOP_TRENDS_JSON_SCHEMA = {
+const COMBINED_JSON_SCHEMA = {
   type: "object",
   properties: {
+    selectedIndices: { type: "array", items: { type: "integer" } },
     trends: {
       type: "array",
       items: {
@@ -213,7 +184,7 @@ const TOP_TRENDS_JSON_SCHEMA = {
       },
     },
   },
-  required: ["trends"],
+  required: ["selectedIndices", "trends"],
 };
 
 function scoreBadge(score: number): string {
@@ -280,11 +251,26 @@ function selectTopTrends(
     }));
 }
 
-async function buildTopTrends(
+type CombinedResult = { trends: Trend[]; topTrends: TrendCluster[] };
+
+async function runCombinedGemini(
+  pool: Record<Category, Trend[]>,
   candidates: Candidate[],
   momentum: Record<Category, MomentumSeries[]>,
-): Promise<TrendCluster[]> {
-  const prompt = `너는 데일리 트렌드 분석 에디터야. 아래 원칙에 따라 "오늘의 트렌드"를 선정해줘.
+): Promise<CombinedResult> {
+  const prompt = `너는 데일리 트렌드 뉴스레터 에디터야. 아래 두 가지 작업을 한 번에 해줘 — ①은 카테고리별 기사 목록용, ②는 "오늘의 트렌드" 분석용이고 서로 별개의 결과물이야.
+
+## ① 카테고리별 기사 선정 (selectedIndices)
+아래 카테고리별 포함/제외 기준을 엄격히 적용해서, 오늘의 후보 기사 중 카테고리마다 정확히 ${PER_CATEGORY_COUNT}개씩 골라줘.
+제외 기준(단순 실적/인사/주가 변동/보도자료성 기사 등)에 해당하는 기사는 그 카테고리에 후보가 부족해지더라도 절대 고르지 마.
+
+[카테고리별 포함/제외 기준]
+${buildCriteriaBlock()}
+
+selectedIndices에는 이렇게 고른 기사들의 번호만 넣어줘(카테고리당 ${PER_CATEGORY_COUNT}개, 총 ${PER_CATEGORY_COUNT * CATEGORIES.length}개 목표).
+
+## ② "오늘의 트렌드" 분석 (trends)
+①과는 별도로, 아래 원칙에 따라 "오늘의 트렌드"를 선정해줘. ①에서 고르지 않은 기사도 트렌드 근거로 자유롭게 써도 됨.
 
 [목적]
 단순히 오늘 기사가 많이 나온 주제가 아니라, "최근 뉴스에서 반복적으로 나타나면서 앞으로 확산될 가능성이 높은 변화"를 찾는다.
@@ -316,16 +302,25 @@ OpenAI Agent 발표 + Google Agent 확대 + Microsoft Agent 플랫폼 + Anthropi
 [카테고리별 데이터랩 모멘텀 참고자료 (최근 7일 검색 비율, 100에 가까울수록 그 기간 내 최고치)]
 ${buildMomentumBlock(momentum)}
 
-[오늘의 후보 기사 목록 (번호) (카테고리) 제목 - 요약 - 출처]
+최대 8개까지 트렌드 후보를 골라서 각각 title(20~35자, 변화 방향 서술), oneLineSummary(변화를 한 문장으로), whyNow(왜 지금 나타난 트렌드인지 2문장), whyItMatters(시장/기업/소비자에게 어떤 의미인지 2~3문장), score(0~100), momentum(상승/유지/하락 중 하나), category(5개 카테고리 중 정확히 하나), evidenceIndices(이 트렌드를 뒷받침하는 후보 기사 번호 2~4개)를 trends에 JSON으로 반환해줘.
+
+## ①·② 공통 후보 기사 목록 (번호) (카테고리) 제목 - 요약 - 출처
 ${buildCandidateBlock(candidates)}
 
-최대 8개까지 트렌드 후보를 골라서 각각 title(20~35자, 변화 방향 서술), oneLineSummary(변화를 한 문장으로), whyNow(왜 지금 나타난 트렌드인지 2문장), whyItMatters(시장/기업/소비자에게 어떤 의미인지 2~3문장), score(0~100), momentum(상승/유지/하락 중 하나), category(5개 카테고리 중 정확히 하나), evidenceIndices(이 트렌드를 뒷받침하는 후보 기사 번호 2~4개)를 JSON으로 반환해줘.`;
+최종적으로 selectedIndices(①)와 trends(②) 두 필드를 모두 채운 하나의 JSON으로 반환해줘.`;
 
   const raw = await generateWithGemini(prompt, {
-    jsonSchema: TOP_TRENDS_JSON_SCHEMA,
+    jsonSchema: COMBINED_JSON_SCHEMA,
   });
-  const parsed = JSON.parse(raw) as { trends: RawTrendCluster[] };
-  return selectTopTrends(parsed.trends ?? [], candidates);
+  const parsed = JSON.parse(raw) as {
+    selectedIndices: number[];
+    trends: RawTrendCluster[];
+  };
+
+  return {
+    trends: pickWithBackfill(parsed.selectedIndices ?? [], pool, candidates),
+    topTrends: selectTopTrends(parsed.trends ?? [], candidates),
+  };
 }
 
 // ── 통합 파이프라인 ──
@@ -343,32 +338,23 @@ async function buildDailyAnalysis(): Promise<DailyAnalysis> {
   ]);
   const candidates = buildCandidateList(pool);
 
-  // 기사 그리드와 트렌드 분석은 서로 독립적인 Gemini 호출임 — 한쪽이 실패해도
-  // 다른 쪽(특히 실제 기사 그리드)은 절대 같이 무너지면 안 됨.
-  const [gridResult, topResult] = await Promise.allSettled([
-    selectGridTrends(pool, candidates),
-    buildTopTrends(candidates, momentum),
-  ]);
-
   let trends: Trend[];
-  if (gridResult.status === "fulfilled") {
-    trends = gridResult.value;
-  } else {
+  let topTrends: TrendCluster[] = [];
+
+  try {
+    const combined = await runCombinedGemini(pool, candidates, momentum);
+    trends = combined.trends;
+    topTrends = combined.topTrends;
+  } catch (error) {
     console.error(
-      "Grid trend selection (Gemini) failed, falling back to raw candidate pool:",
-      gridResult.reason,
+      "Combined Gemini curation failed, falling back to raw candidate pool for the article grid:",
+      error,
     );
-    // Gemini 큐레이션이 실패해도 실제 수집된 기사(원문 후보 pool)는 그대로 노출
+    // Gemini 호출 자체가 실패해도 실제 수집된 기사(원문 후보 pool)는 그대로 노출.
+    // 트렌드 분석은 신뢰할 근거가 없으니 비워둠(UI가 알아서 섹션을 숨김).
     trends = CATEGORIES.flatMap((category) =>
       pool[category].slice(0, PER_CATEGORY_COUNT),
     );
-  }
-
-  let topTrends: TrendCluster[] = [];
-  if (topResult.status === "fulfilled") {
-    topTrends = topResult.value;
-  } else {
-    console.error("Top trend clustering (Gemini) failed:", topResult.reason);
   }
 
   return {
@@ -380,6 +366,6 @@ async function buildDailyAnalysis(): Promise<DailyAnalysis> {
 
 export const getDailyAnalysis = unstable_cache(
   buildDailyAnalysis,
-  ["daily-trend-analysis-v5"],
+  ["daily-trend-analysis-v6"],
   { revalidate: 86400, tags: ["daily-analysis"] },
 );
