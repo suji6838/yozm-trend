@@ -20,7 +20,6 @@ export default function HomeClient({
   trends: Trend[];
   analysis: DailyAnalysis | null;
 }) {
-  const [bannerOpen, setBannerOpen] = useState(true);
   const [activeCategory, setActiveCategory] = useState<Category | "전체">(
     "전체",
   );
@@ -39,19 +38,6 @@ export default function HomeClient({
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 px-6 py-10 shadow-lg shadow-indigo-200 sm:px-10 sm:py-12">
         <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-20 left-10 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-
-        {bannerOpen && (
-          <div className="relative mb-6 flex items-center justify-between rounded-full bg-white/15 px-4 py-2 text-sm text-white backdrop-blur-sm">
-            <span>✦ 카테고리 키워드와 AI 분석으로 하루에 한 번 트렌드를 새로 골라드려요.</span>
-            <button
-              type="button"
-              onClick={() => setBannerOpen(false)}
-              className="text-white/70 hover:text-white"
-            >
-              닫기
-            </button>
-          </div>
-        )}
 
         <p className="relative text-xs font-semibold tracking-wide text-blue-100">
           DAILY CURATION · {formatTodayLabel()}
