@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CATEGORIES, CATEGORY_ICONS, Category, Trend } from "@/data/trends";
+import type { DailyAnalysis } from "@/lib/dailyAnalysis";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
 
@@ -11,7 +12,13 @@ function formatTodayLabel() {
   return `${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
 }
 
-export default function HomeClient({ trends }: { trends: Trend[] }) {
+export default function HomeClient({
+  trends,
+  analysis,
+}: {
+  trends: Trend[];
+  analysis: DailyAnalysis | null;
+}) {
   const [bannerOpen, setBannerOpen] = useState(true);
   const [activeCategory, setActiveCategory] = useState<Category | "전체">(
     "전체",
@@ -84,6 +91,35 @@ export default function HomeClient({ trends }: { trends: Trend[] }) {
           ))}
         </div>
       </div>
+
+      {analysis && (
+        <div className="mt-6 rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-xs">
+              ✨
+            </span>
+            <span className="text-xs font-semibold tracking-wide text-indigo-600">
+              오늘의 트렌드 분석 · AI 픽스
+            </span>
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-700">
+            {analysis.text}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {Object.entries(analysis.topKeywords).map(([category, keyword]) => (
+              <span
+                key={category}
+                className="rounded-full bg-indigo-50 px-3 py-1 text-xs text-indigo-600"
+              >
+                {CATEGORY_ICONS[category as Category]} {keyword}
+              </span>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-zinc-400">
+            네이버 데이터랩 인기 검색어 + 오늘의 뉴스를 바탕으로 하루에 한 번 자동 생성돼요.
+          </p>
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {filteredTrends.map((trend) => (
