@@ -17,5 +17,6 @@ export async function GET(req: NextRequest) {
     ok: true,
     generatedAt: analysis.generatedAt,
     trendCount: analysis.trends.length,
+    topTrendCount: analysis.topTrends.length,
   });
 }
