@@ -99,7 +99,7 @@ export default function HomeClient({
               ✨
             </span>
             <span className="text-xs font-semibold tracking-wide text-indigo-600">
-              오늘의 트렌드 분석 · AI 픽스
+              오늘의 트렌드 분석
             </span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-zinc-700">
