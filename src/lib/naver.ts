@@ -44,11 +44,11 @@ import { CATEGORIES, Category, Trend } from "@/data/trends";
 const PER_CATEGORY_COUNT = 3;
 
 const CATEGORY_QUERIES: Record<Category, string[]> = {
-  "AI/테크": ["AI"],
+  "AI/테크": ["AI", "AI 서비스"],
   "금융/투자": ["국내증시", "해외증시 ETF"],
-  "건강/뷰티": ["건강 뷰티"],
+  "건강/뷰티": ["뷰티 화장품"],
   "소비/라이프": ["소비 트렌드"],
-  "마케팅/비즈니스": ["브랜드 마케팅", "스타트업 비즈니스"],
+  "마케팅/비즈니스": ["브랜드 마케팅", "스타트업 투자"],
 };
 
 function decodeHtmlEntities(text: string) {
