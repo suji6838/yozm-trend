@@ -46,7 +46,9 @@ export default function HomeClient({
           오늘, 놓치면 아쉬운 흐름
         </h1>
         <p className="relative mt-2 text-sm text-blue-100">
-          수많은 이야기 중 지금 알아두면 좋은 변화만 간결하게 정리했어요.
+          수많은 뉴스 속, 지금 주목할 변화만 간결하게 전합니다.
+          <br />
+          AI가 반복되는 흐름과 관심도, 산업 영향력을 분석해 매일 업데이트합니다.
         </p>
 
         <div className="relative mt-6 flex flex-wrap gap-2">
@@ -94,9 +96,6 @@ export default function HomeClient({
               <TrendClusterCard key={i} trend={trend} />
             ))}
           </div>
-          <p className="mt-3 text-xs text-zinc-400">
-            반복적으로 나타나는 변화·최근 관심 증가·산업 영향력을 기준으로 AI가 골라 하루에 한 번 갱신돼요.
-          </p>
         </div>
       )}
 
