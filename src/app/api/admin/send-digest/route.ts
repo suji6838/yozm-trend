@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { runDigestSend } from "@/lib/sendDigest";
 import { getAdminUser } from "@/lib/adminAuth";
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const admin = await getAdminUser();
   if (!admin) {

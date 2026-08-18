@@ -343,10 +343,33 @@ async function buildDailyAnalysis(): Promise<DailyAnalysis> {
   ]);
   const candidates = buildCandidateList(pool);
 
-  const [trends, topTrends] = await Promise.all([
+  // 기사 그리드와 트렌드 분석은 서로 독립적인 Gemini 호출임 — 한쪽이 실패해도
+  // 다른 쪽(특히 실제 기사 그리드)은 절대 같이 무너지면 안 됨.
+  const [gridResult, topResult] = await Promise.allSettled([
     selectGridTrends(pool, candidates),
     buildTopTrends(candidates, momentum),
   ]);
+
+  let trends: Trend[];
+  if (gridResult.status === "fulfilled") {
+    trends = gridResult.value;
+  } else {
+    console.error(
+      "Grid trend selection (Gemini) failed, falling back to raw candidate pool:",
+      gridResult.reason,
+    );
+    // Gemini 큐레이션이 실패해도 실제 수집된 기사(원문 후보 pool)는 그대로 노출
+    trends = CATEGORIES.flatMap((category) =>
+      pool[category].slice(0, PER_CATEGORY_COUNT),
+    );
+  }
+
+  let topTrends: TrendCluster[] = [];
+  if (topResult.status === "fulfilled") {
+    topTrends = topResult.value;
+  } else {
+    console.error("Top trend clustering (Gemini) failed:", topResult.reason);
+  }
 
   return {
     trends,
@@ -357,6 +380,6 @@ async function buildDailyAnalysis(): Promise<DailyAnalysis> {
 
 export const getDailyAnalysis = unstable_cache(
   buildDailyAnalysis,
-  ["daily-trend-analysis-v3"],
+  ["daily-trend-analysis-v4"],
   { revalidate: 86400 },
 );
