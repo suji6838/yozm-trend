@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { put, list } from "@vercel/blob";
 import { CATEGORIES, Category, Trend } from "@/data/trends";
 import { getCandidatePool, getDatalabSearchTrend } from "./naver";
 import { generateWithGemini } from "./gemini";
@@ -331,6 +332,37 @@ export type DailyAnalysis = {
   generatedAt: string;
 };
 
+// Gemini 호출이 실패(할당량 소진 등)해도 사이트가 비어 보이지 않도록,
+// 마지막으로 성공한 분석 결과를 Vercel Blob에 저장해뒀다가 그대로 재사용한다.
+const LAST_GOOD_PATHNAME = "daily-analysis-latest.json";
+
+async function saveLastGoodAnalysis(analysis: DailyAnalysis) {
+  try {
+    await put(LAST_GOOD_PATHNAME, JSON.stringify(analysis), {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json",
+    });
+  } catch (error) {
+    console.error("Failed to persist last-good daily analysis:", error);
+  }
+}
+
+async function loadLastGoodAnalysis(): Promise<DailyAnalysis | null> {
+  try {
+    const { blobs } = await list({ prefix: LAST_GOOD_PATHNAME, limit: 1 });
+    const blob = blobs[0];
+    if (!blob) return null;
+    const res = await fetch(blob.url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as DailyAnalysis;
+  } catch (error) {
+    console.error("Failed to load last-good daily analysis:", error);
+    return null;
+  }
+}
+
 async function buildDailyAnalysis(): Promise<DailyAnalysis> {
   const [pool, momentum] = await Promise.all([
     getCandidatePool(6),
@@ -338,34 +370,37 @@ async function buildDailyAnalysis(): Promise<DailyAnalysis> {
   ]);
   const candidates = buildCandidateList(pool);
 
-  let trends: Trend[];
-  let topTrends: TrendCluster[] = [];
-
   try {
     const combined = await runCombinedGemini(pool, candidates, momentum);
-    trends = combined.trends;
-    topTrends = combined.topTrends;
+    const analysis: DailyAnalysis = {
+      trends: combined.trends,
+      topTrends: combined.topTrends,
+      generatedAt: new Date().toISOString(),
+    };
+    await saveLastGoodAnalysis(analysis);
+    return analysis;
   } catch (error) {
     console.error(
-      "Combined Gemini curation failed, falling back to raw candidate pool for the article grid:",
+      "Combined Gemini curation failed, falling back to last-good analysis:",
       error,
     );
-    // Gemini 호출 자체가 실패해도 실제 수집된 기사(원문 후보 pool)는 그대로 노출.
-    // 트렌드 분석은 신뢰할 근거가 없으니 비워둠(UI가 알아서 섹션을 숨김).
-    trends = CATEGORIES.flatMap((category) =>
-      pool[category].slice(0, PER_CATEGORY_COUNT),
-    );
-  }
+    // 이전에 성공한 분석 결과가 있으면 그걸 그대로 재사용.
+    const lastGood = await loadLastGoodAnalysis();
+    if (lastGood) return lastGood;
 
-  return {
-    trends,
-    topTrends,
-    generatedAt: new Date().toISOString(),
-  };
+    // 저장된 결과조차 없을 때만(최초 실행 등) 원문 후보 기사를 그대로 노출.
+    return {
+      trends: CATEGORIES.flatMap((category) =>
+        pool[category].slice(0, PER_CATEGORY_COUNT),
+      ),
+      topTrends: [],
+      generatedAt: new Date().toISOString(),
+    };
+  }
 }
 
 export const getDailyAnalysis = unstable_cache(
   buildDailyAnalysis,
-  ["daily-trend-analysis-v6"],
-  { revalidate: 86400, tags: ["daily-analysis"] },
+  ["daily-trend-analysis-v7"],
+  { revalidate: 259200, tags: ["daily-analysis"] },
 );
