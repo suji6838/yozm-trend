@@ -1,5 +1,25 @@
 import { Trend } from "@/data/trends";
 
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeHref(link: string | undefined) {
+  if (!link) return "#";
+  try {
+    const url = new URL(link);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "#";
+    return escapeHtml(url.toString());
+  } catch {
+    return "#";
+  }
+}
+
 export function buildDigestEmail(trends: Trend[]) {
   const today = new Date();
   const dateLabel = `${today.getFullYear()}.${today.getMonth() + 1}.${today.getDate()}`;
@@ -10,12 +30,12 @@ export function buildDigestEmail(trends: Trend[]) {
       (t) => `
       <tr>
         <td style="padding:16px 0;border-bottom:1px solid #eee;">
-          <span style="display:inline-block;background:#eef2ff;color:#4f46e5;font-size:12px;padding:2px 8px;border-radius:9999px;">${t.category}</span>
+          <span style="display:inline-block;background:#eef2ff;color:#4f46e5;font-size:12px;padding:2px 8px;border-radius:9999px;">${escapeHtml(t.category)}</span>
           <div style="margin-top:8px;font-size:16px;font-weight:600;color:#111;">
-            <a href="${t.link ?? "#"}" style="color:#111;text-decoration:none;">${t.title}</a>
+            <a href="${safeHref(t.link)}" style="color:#111;text-decoration:none;">${escapeHtml(t.title)}</a>
           </div>
-          <p style="margin:6px 0 0;font-size:14px;color:#555;line-height:1.5;">${t.summary}</p>
-          <p style="margin:6px 0 0;font-size:12px;color:#999;">출처 · ${t.source}</p>
+          <p style="margin:6px 0 0;font-size:14px;color:#555;line-height:1.5;">${escapeHtml(t.summary)}</p>
+          <p style="margin:6px 0 0;font-size:12px;color:#999;">출처 · ${escapeHtml(t.source)}</p>
         </td>
       </tr>`,
     )

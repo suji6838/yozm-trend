@@ -1,8 +1,8 @@
 import Header from "@/components/Header";
 import { listSubscribers } from "@/lib/resend";
+import { getAdminUser } from "@/lib/adminAuth";
 
 type SearchParams = {
-  key?: string;
   sent?: string;
   failed?: string;
 };
@@ -12,18 +12,22 @@ export default async function AdminPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const { key, sent, failed } = await searchParams;
+  const admin = await getAdminUser();
 
-  if (!key || key !== process.env.CRON_SECRET) {
+  if (!admin) {
     return (
       <div className="min-h-screen bg-zinc-50">
         <Header />
         <main className="mx-auto max-w-2xl px-6 py-16 text-center">
-          <p className="text-sm text-zinc-500">접근 권한이 없어요.</p>
+          <p className="text-sm text-zinc-500">
+            관리자 계정으로 로그인해야 볼 수 있어요.
+          </p>
         </main>
       </div>
     );
   }
+
+  const { sent, failed } = await searchParams;
 
   let subscriberCount = 0;
   let loadError: string | null = null;
@@ -58,7 +62,6 @@ export default async function AdminPage({
           )}
 
           <form action="/api/admin/send-digest" method="POST" className="mt-4">
-            <input type="hidden" name="key" value={key} />
             <button
               type="submit"
               className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
