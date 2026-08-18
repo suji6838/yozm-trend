@@ -5,6 +5,7 @@ import { CATEGORIES, CATEGORY_ICONS, Category, Trend } from "@/data/trends";
 import type { DailyAnalysis } from "@/lib/dailyAnalysis";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
+import TrendClusterCard from "./TrendClusterCard";
 
 function formatTodayLabel() {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
@@ -92,31 +93,23 @@ export default function HomeClient({
         </div>
       </div>
 
-      {analysis && (
-        <div className="mt-6 rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm">
+      {analysis && analysis.topTrends.length > 0 && (
+        <div className="mt-6">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-xs">
               ✨
             </span>
             <span className="text-xs font-semibold tracking-wide text-indigo-600">
-              오늘의 트렌드 분석
+              오늘의 트렌드
             </span>
           </div>
-          <p className="mt-3 text-sm leading-relaxed text-zinc-700">
-            {analysis.text}
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {Object.entries(analysis.topKeywords).map(([category, keyword]) => (
-              <span
-                key={category}
-                className="rounded-full bg-indigo-50 px-3 py-1 text-xs text-indigo-600"
-              >
-                {CATEGORY_ICONS[category as Category]} {keyword}
-              </span>
+          <div className="mt-3 space-y-4">
+            {analysis.topTrends.map((trend, i) => (
+              <TrendClusterCard key={i} trend={trend} />
             ))}
           </div>
           <p className="mt-3 text-xs text-zinc-400">
-            네이버 데이터랩 인기 검색어 + 오늘의 뉴스를 바탕으로 하루에 한 번 자동 생성돼요.
+            반복적으로 나타나는 변화·최근 관심 증가·산업 영향력을 기준으로 AI가 골라 하루에 한 번 갱신돼요.
           </p>
         </div>
       )}
