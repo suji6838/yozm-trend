@@ -81,7 +81,7 @@ export default function HomeClient({
         </div>
       </div>
 
-      {analysis && analysis.topTrends.length > 0 && (
+      {activeCategory === "전체" && analysis && analysis.topTrends.length > 0 && (
         <div className="mt-6">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-xs">

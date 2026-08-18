@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { Show, UserButton } from "@clerk/nextjs";
 
 const NAV_ITEMS = [
-  { href: "/", label: "오늘의 트렌드" },
   { href: "/saved", label: "저장함" },
   { href: "/subscribe", label: "구독 설정" },
 ];
