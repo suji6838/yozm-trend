@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { listSubscribers } from "@/lib/resend";
 import { getAdminUser } from "@/lib/adminAuth";
 
@@ -16,13 +17,14 @@ export default async function AdminPage({
 
   if (!admin) {
     return (
-      <div className="min-h-screen bg-zinc-50">
+      <div className="flex min-h-screen flex-col bg-zinc-50">
         <Header />
-        <main className="mx-auto max-w-2xl px-6 py-16 text-center">
+        <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-16 text-center">
           <p className="text-sm text-zinc-500">
             관리자 계정으로 로그인해야 볼 수 있어요.
           </p>
         </main>
+        <Footer />
       </div>
     );
   }
@@ -39,9 +41,9 @@ export default async function AdminPage({
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div className="flex min-h-screen flex-col bg-zinc-50">
       <Header />
-      <main className="mx-auto max-w-2xl px-6 py-8">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
         <h1 className="text-2xl font-bold text-zinc-900">관리자 · 뉴스레터 발송</h1>
 
         {(sent !== undefined || failed !== undefined) && (
@@ -76,6 +78,7 @@ export default async function AdminPage({
           </p>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

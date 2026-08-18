@@ -11,6 +11,9 @@ type Subscription = {
   categories: Category[];
 };
 
+// 발신 도메인(Resend) 인증 전까지 구독 폼을 비활성화. 도메인 인증 후 true로.
+const NEWSLETTER_ENABLED = false;
+
 export default function SubscribeClient() {
   const { isLoaded, isSignedIn, user } = useUser();
   const accountEmail = user?.primaryEmailAddress?.emailAddress ?? "";
@@ -60,6 +63,26 @@ export default function SubscribeClient() {
       setStatus("error");
     }
   };
+
+  if (!NEWSLETTER_ENABLED) {
+    return (
+      <main className="mx-auto max-w-2xl px-6 py-8">
+        <h1 className="text-3xl font-bold text-zinc-900">구독 설정</h1>
+        <div className="mt-6 rounded-2xl border border-zinc-100 bg-white p-8 text-center">
+          <p className="text-sm text-zinc-600">
+            뉴스레터 구독 기능은 준비 중이에요. 곧 이메일로 오늘의 트렌드를
+            받아보실 수 있게 할게요.
+          </p>
+          <Link
+            href="/"
+            className="mt-4 inline-block rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            오늘의 트렌드 보러 가기 →
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   if (!isLoaded) {
     return (

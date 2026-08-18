@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import HomeClient from "@/components/HomeClient";
 import { TRENDS } from "@/data/trends";
 import { getDailyAnalysis, DailyAnalysis } from "@/lib/dailyAnalysis";
@@ -19,11 +20,12 @@ export default async function Home() {
   const trends = analysis && analysis.trends.length > 0 ? analysis.trends : TRENDS;
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div className="flex min-h-screen flex-col bg-zinc-50">
       <Header />
       <Suspense>
         <HomeClient trends={trends} analysis={analysis} />
       </Suspense>
+      <Footer />
     </div>
   );
 }

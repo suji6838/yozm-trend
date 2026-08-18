@@ -4,10 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Show, UserButton } from "@clerk/nextjs";
 
-const NAV_ITEMS = [
-  { href: "/saved", label: "저장함" },
-  { href: "/subscribe", label: "구독 설정" },
-];
+const NAV_ITEMS = [{ href: "/saved", label: "저장함" }];
 
 export default function Header() {
   const pathname = usePathname();
