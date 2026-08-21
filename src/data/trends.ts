@@ -1,13 +1,13 @@
 export type Category =
   | "AI/테크"
-  | "금융/투자"
+  | "금융"
   | "건강/뷰티"
   | "소비/라이프"
   | "마케팅/비즈니스";
 
 export const CATEGORIES: Category[] = [
   "AI/테크",
-  "금융/투자",
+  "금융",
   "건강/뷰티",
   "소비/라이프",
   "마케팅/비즈니스",
@@ -15,7 +15,7 @@ export const CATEGORIES: Category[] = [
 
 export const CATEGORY_STYLES: Record<Category, string> = {
   "AI/테크": "bg-blue-50 text-blue-600",
-  "금융/투자": "bg-violet-50 text-violet-600",
+  "금융": "bg-violet-50 text-violet-600",
   "건강/뷰티": "bg-green-50 text-green-600",
   "소비/라이프": "bg-amber-50 text-amber-600",
   "마케팅/비즈니스": "bg-rose-50 text-rose-600",
@@ -23,7 +23,7 @@ export const CATEGORY_STYLES: Record<Category, string> = {
 
 export const CATEGORY_ICONS: Record<Category, string> = {
   "AI/테크": "🤖",
-  "금융/투자": "💰",
+  "금융": "💰",
   "건강/뷰티": "💆",
   "소비/라이프": "🛍️",
   "마케팅/비즈니스": "📈",
@@ -31,11 +31,18 @@ export const CATEGORY_ICONS: Record<Category, string> = {
 
 export const CATEGORY_ACCENT: Record<Category, string> = {
   "AI/테크": "from-blue-500 to-sky-400",
-  "금융/투자": "from-violet-500 to-purple-400",
+  "금융": "from-violet-500 to-purple-400",
   "건강/뷰티": "from-green-500 to-emerald-400",
   "소비/라이프": "from-amber-500 to-orange-400",
   "마케팅/비즈니스": "from-rose-500 to-pink-400",
 };
+
+// "투자" 탭은 뉴스 큐레이션 대상이 아니라 코스픽(주식 추천) 전용 탭이라
+// Category(뉴스 카테고리)에는 포함하지 않고 UI 표시용 상수만 별도로 둠.
+export const INVESTMENT_TAB = {
+  label: "투자",
+  icon: "📊",
+} as const;
 
 export type Trend = {
   id: string;
@@ -86,7 +93,7 @@ export const TRENDS: Trend[] = [
   },
   {
     id: "5",
-    category: "금융/투자",
+    category: "금융",
     publishedDate: "2026-08-07",
     title: "생활비 관리, 자동화가 기준이 되다",
     summary:

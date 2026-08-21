@@ -2,11 +2,12 @@
 
 import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CATEGORIES, CATEGORY_ICONS, Category, Trend } from "@/data/trends";
+import { CATEGORIES, CATEGORY_ICONS, Category, INVESTMENT_TAB, Trend } from "@/data/trends";
 import type { DailyAnalysis } from "@/lib/dailyAnalysis";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
 import TrendClusterCard from "./TrendClusterCard";
+import InvestmentTab from "./InvestmentTab";
 
 function formatTodayLabel() {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
@@ -24,12 +25,14 @@ export default function HomeClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const categoryParam = searchParams.get("category");
-  const activeCategory: Category | "전체" =
-    categoryParam && (CATEGORIES as string[]).includes(categoryParam)
-      ? (categoryParam as Category)
-      : "전체";
+  const activeCategory: Category | typeof INVESTMENT_TAB.label | "전체" =
+    categoryParam === INVESTMENT_TAB.label
+      ? INVESTMENT_TAB.label
+      : categoryParam && (CATEGORIES as string[]).includes(categoryParam)
+        ? (categoryParam as Category)
+        : "전체";
 
-  const setActiveCategory = (category: Category | "전체") => {
+  const setActiveCategory = (category: Category | typeof INVESTMENT_TAB.label | "전체") => {
     const href = category === "전체" ? "/" : `/?category=${encodeURIComponent(category)}`;
     router.replace(href, { scroll: false });
   };
@@ -89,8 +92,22 @@ export default function HomeClient({
               {category}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setActiveCategory(INVESTMENT_TAB.label)}
+            className={
+              activeCategory === INVESTMENT_TAB.label
+                ? "rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-blue-700 shadow-sm"
+                : "rounded-full border border-white/30 px-4 py-1.5 text-sm text-white hover:bg-white/10"
+            }
+          >
+            <span className="mr-1">{INVESTMENT_TAB.icon}</span>
+            {INVESTMENT_TAB.label}
+          </button>
         </div>
       </div>
+
+      {activeCategory === INVESTMENT_TAB.label && <InvestmentTab />}
 
       {activeCategory === "전체" && analysis && analysis.topTrends.length > 0 && (
         <div className="mt-6">
@@ -110,16 +127,18 @@ export default function HomeClient({
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {filteredTrends.map((trend) => (
-          <TrendCard
-            key={trend.id}
-            trend={trend}
-            saved={savedIds.includes(trend.id)}
-            onToggleSave={toggleSave}
-          />
-        ))}
-      </div>
+      {activeCategory !== INVESTMENT_TAB.label && (
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {filteredTrends.map((trend) => (
+            <TrendCard
+              key={trend.id}
+              trend={trend}
+              saved={savedIds.includes(trend.id)}
+              onToggleSave={toggleSave}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
 }

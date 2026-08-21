@@ -20,7 +20,7 @@ export const CATEGORY_CRITERIA: Record<
       "AI와 직접적인 관계가 없는 기업 뉴스",
     ],
   },
-  "금융/투자": {
+  "금융": {
     include: [
       "금융/은행/보험/증권/카드/핀테크",
       "투자/주식/증시/채권/펀드/ETF/IPO/공모주",
