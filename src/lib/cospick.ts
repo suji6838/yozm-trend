@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { put, get } from "@vercel/blob";
 import {
   getVolumeRankUniverse,
@@ -20,7 +19,7 @@ export const COSPICK_SCORE_MAX = TREND_MAX + VOLUME_MAX + MARKET_MOOD_MAX;
 
 const TRADING_VALUE_MIN = 30_000_000_000; // 300억: 이 미만이면 매수금지
 const TRADING_VALUE_GOOD = 100_000_000_000; // 1,000억: B 거래대금 가점 기준
-const SURGE_LIMIT_PCT = 15; // 당일 +15% 이상 급등 → 감점 + 매수금지
+const SURGE_LIMIT_PCT = 15; // 당일 +15% 이상 급등 → 매수금지
 const CRASH_LIMIT_PCT = -7; // 당일 -7% 이하 급락 → 매수금지
 
 function sma(values: number[], period: number) {
@@ -189,59 +188,47 @@ async function buildCospickSnapshot(): Promise<CospickSnapshot> {
     .sort((a, b) => b.score.total - a.score.total)
     .slice(0, 3);
 
-  const snapshot: CospickSnapshot = {
+  return {
     candidates,
     scanned: universe.length,
     marketMood: { kospiAboveMa20: kospiAbove, kosdaqAboveMa20: kosdaqAbove },
     generatedAt: new Date().toISOString(),
   };
-  await saveLastGoodSnapshot(snapshot);
-  return snapshot;
 }
 
-const LAST_GOOD_PATHNAME = "cospick-snapshot-latest.json";
+const SNAPSHOT_PATHNAME = "cospick-snapshot-latest.json";
 
-async function saveLastGoodSnapshot(snapshot: CospickSnapshot) {
-  try {
-    await put(LAST_GOOD_PATHNAME, JSON.stringify(snapshot), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-    });
-  } catch (error) {
-    console.error("Failed to persist last-good cospick snapshot:", error);
-  }
+async function saveSnapshot(snapshot: CospickSnapshot) {
+  await put(SNAPSHOT_PATHNAME, JSON.stringify(snapshot), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
 }
 
-async function loadLastGoodSnapshot(): Promise<CospickSnapshot | null> {
+// 방문자용 — KIS를 직접 부르지 않고 cron이 미리 저장해둔 Blob만 읽는다.
+// (unstable_cache는 이 배포 환경에서 요청 간 재사용이 안 돼 매번 KIS를 다시 호출하는
+// 문제가 있어 걷어냄 — Blob 직접 읽기로 대체)
+export async function getCospickSnapshot(): Promise<CospickSnapshot | null> {
   try {
-    const result = await get(LAST_GOOD_PATHNAME, { access: "private" });
+    const result = await get(SNAPSHOT_PATHNAME, { access: "private" });
     if (!result || result.statusCode !== 200) return null;
     const text = await new Response(result.stream).text();
     return JSON.parse(text) as CospickSnapshot;
   } catch (error) {
-    console.error("Failed to load last-good cospick snapshot:", error);
+    console.error("Failed to load cospick snapshot:", error);
     return null;
   }
 }
 
-async function buildCospickSnapshotWithFallback(): Promise<CospickSnapshot> {
-  try {
-    return await buildCospickSnapshot();
-  } catch (error) {
-    console.error("Failed to build cospick snapshot, falling back:", error);
-    const lastGood = await loadLastGoodSnapshot();
-    if (lastGood) return lastGood;
-    throw error;
-  }
+// cron 전용 — 실제로 KIS를 호출해 새로 스캔하고 Blob에 저장한다.
+// 실패 시 기존에 저장돼 있던 마지막 성공 스냅샷을 그대로 유지(덮어쓰지 않음).
+export async function refreshCospickSnapshot(): Promise<CospickSnapshot> {
+  const snapshot = await buildCospickSnapshot();
+  await saveSnapshot(snapshot);
+  return snapshot;
 }
-
-export const getCospickSnapshot = unstable_cache(
-  buildCospickSnapshotWithFallback,
-  ["cospick-snapshot-v1"],
-  { revalidate: 86400, tags: ["cospick-snapshot"] },
-);
 
 // ── 다음날 09:10 매도 체크 (전날 15시 스캔가를 매수가로 가정) ──────────
 export type ExitCheckItem = {
@@ -260,8 +247,7 @@ function classifyExit(pct: number): string {
   return "🔴 악재 확인 후 즉시 대응";
 }
 
-async function buildExitCheck(): Promise<ExitCheckItem[]> {
-  const snapshot = await getCospickSnapshot();
+async function buildExitCheck(snapshot: CospickSnapshot): Promise<ExitCheckItem[]> {
   return Promise.all(
     snapshot.candidates.map(async (candidate) => {
       const price = await getCurrentPrice(candidate.code);
@@ -279,9 +265,34 @@ async function buildExitCheck(): Promise<ExitCheckItem[]> {
   );
 }
 
-// 화면에서도 같은 결과를 보여줄 수 있도록 캐싱 — 방문할 때마다 KIS를 다시 부르지 않게 5분 유지.
-// 09:10 cron이 revalidateTag로 강제 갱신하므로 그 시점 값은 항상 최신.
-export const getExitCheck = unstable_cache(buildExitCheck, ["exit-check-v1"], {
-  revalidate: 300,
-  tags: ["exit-check"],
-});
+const EXIT_CHECK_PATHNAME = "exit-check-latest.json";
+
+async function saveExitCheck(items: ExitCheckItem[]) {
+  await put(EXIT_CHECK_PATHNAME, JSON.stringify(items), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
+
+// 방문자용 — Blob만 읽는다.
+export async function getExitCheck(): Promise<ExitCheckItem[]> {
+  try {
+    const result = await get(EXIT_CHECK_PATHNAME, { access: "private" });
+    if (!result || result.statusCode !== 200) return [];
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as ExitCheckItem[];
+  } catch (error) {
+    console.error("Failed to load exit check:", error);
+    return [];
+  }
+}
+
+// cron 전용 — 저장된 코스픽 스냅샷 기준으로 현재가를 새로 조회해 Blob에 저장한다.
+export async function refreshExitCheck(): Promise<ExitCheckItem[]> {
+  const snapshot = await getCospickSnapshot();
+  const items = snapshot ? await buildExitCheck(snapshot) : [];
+  await saveExitCheck(items);
+  return items;
+}

@@ -6,16 +6,15 @@ import { TRENDS } from "@/data/trends";
 import { getDailyAnalysis, DailyAnalysis } from "@/lib/dailyAnalysis";
 import { getCospickSnapshot, CospickSnapshot, getExitCheck, ExitCheckItem } from "@/lib/cospick";
 
-// 캐시 미스 시 네이버+데이터랩+Gemini 2회 호출이 순차적으로 걸려 20~45초까지
-// 걸릴 수 있어서, Vercel 기본 실행시간 제한(약 10초)에 걸리지 않도록 연장.
-// 코스픽/매도체크는 각각 별도 cron이 미리 캐시를 채워두므로 보통은 즉시 반환됨.
-export const maxDuration = 60;
+// getDailyAnalysis/getCospickSnapshot/getExitCheck는 각자 cron이 미리 채워둔
+// Vercel Blob만 읽기 때문에(네이버/Gemini/KIS를 직접 호출하지 않음) 항상 빠르다.
+// 여유를 위해 넉넉하게 설정.
+export const maxDuration = 30;
 
 // 이 페이지 자체를 Vercel 엣지가 통째로 캐싱하지 않도록 강제.
-// (내부 데이터는 getDailyAnalysis/getCospickSnapshot/getExitCheck가 각자
-// unstable_cache로 캐싱하므로, 여기서 매 요청 재실행해도 웜 상태면 빠르다.
-// 반대로 페이지 자체가 캐싱되면 cron이 데이터를 갱신해도 방문자는 예전
-// 응답(예: 일시적 오류로 비어버린 exitCheck)을 계속 보게 되는 문제가 있었음.)
+// (페이지가 캐싱되면 cron이 Blob 데이터를 갱신해도 방문자는 예전 응답을
+// 계속 받게 되는 문제가 있었음 — 위 세 함수는 Blob을 매번 새로 읽으므로
+// dynamic으로 강제해도 느려지지 않는다.)
 export const dynamic = "force-dynamic";
 
 export default async function Home() {

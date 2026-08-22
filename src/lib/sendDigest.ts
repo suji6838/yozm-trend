@@ -7,7 +7,7 @@ export async function runDigestSend() {
   let trends = TRENDS;
   try {
     const analysis = await getDailyAnalysis();
-    if (analysis.trends.length > 0) trends = analysis.trends;
+    if (analysis && analysis.trends.length > 0) trends = analysis.trends;
   } catch (error) {
     console.error("send-digest: falling back to static trends:", error);
   }

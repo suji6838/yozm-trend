@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { put, get } from "@vercel/blob";
 import { CATEGORIES, Category, Trend } from "@/data/trends";
 import { getCandidatePool, getDatalabSearchTrend } from "./naver";
@@ -332,36 +331,37 @@ export type DailyAnalysis = {
   generatedAt: string;
 };
 
-// Gemini 호출이 실패(할당량 소진 등)해도 사이트가 비어 보이지 않도록,
-// 마지막으로 성공한 분석 결과를 Vercel Blob에 저장해뒀다가 그대로 재사용한다.
+// unstable_cache는 이 배포 환경에서 요청 간 재사용이 안 돼(방문마다 Gemini/네이버를
+// 다시 호출) 걷어냄 — cron이 미리 빌드해 Vercel Blob에 저장해두고, 방문자는 그 Blob만
+// 읽는 방식으로 대체.
 const LAST_GOOD_PATHNAME = "daily-analysis-latest.json";
 
-async function saveLastGoodAnalysis(analysis: DailyAnalysis) {
-  try {
-    await put(LAST_GOOD_PATHNAME, JSON.stringify(analysis), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-    });
-  } catch (error) {
-    console.error("Failed to persist last-good daily analysis:", error);
-  }
+async function saveAnalysis(analysis: DailyAnalysis) {
+  await put(LAST_GOOD_PATHNAME, JSON.stringify(analysis), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
 }
 
-async function loadLastGoodAnalysis(): Promise<DailyAnalysis | null> {
+// 방문자용 — Gemini/네이버를 직접 부르지 않고 cron이 저장해둔 Blob만 읽는다.
+export async function getDailyAnalysis(): Promise<DailyAnalysis | null> {
   try {
     const result = await get(LAST_GOOD_PATHNAME, { access: "private" });
     if (!result || result.statusCode !== 200) return null;
     const text = await new Response(result.stream).text();
     return JSON.parse(text) as DailyAnalysis;
   } catch (error) {
-    console.error("Failed to load last-good daily analysis:", error);
+    console.error("Failed to load daily analysis:", error);
     return null;
   }
 }
 
-async function buildDailyAnalysis(): Promise<DailyAnalysis> {
+// cron 전용 — 실제로 네이버+Gemini를 호출해 새로 분석하고 Blob에 저장한다.
+// Gemini 호출이 실패(할당량 소진 등)해도, 기존에 저장돼 있던 마지막 성공 결과를
+// 그대로 유지(덮어쓰지 않음)하고 그 값을 반환한다.
+export async function refreshDailyAnalysis(): Promise<DailyAnalysis> {
   const [pool, momentum] = await Promise.all([
     getCandidatePool(6),
     getMomentumSeries(),
@@ -375,30 +375,26 @@ async function buildDailyAnalysis(): Promise<DailyAnalysis> {
       topTrends: combined.topTrends,
       generatedAt: new Date().toISOString(),
     };
-    await saveLastGoodAnalysis(analysis);
+    await saveAnalysis(analysis);
     return analysis;
   } catch (error) {
     console.error(
       "Combined Gemini curation failed, falling back to last-good analysis:",
       error,
     );
-    // 이전에 성공한 분석 결과가 있으면 그걸 그대로 재사용.
-    const lastGood = await loadLastGoodAnalysis();
+    // 이전에 성공한 분석 결과가 있으면 그걸 그대로 유지.
+    const lastGood = await getDailyAnalysis();
     if (lastGood) return lastGood;
 
-    // 저장된 결과조차 없을 때만(최초 실행 등) 원문 후보 기사를 그대로 노출.
-    return {
+    // 저장된 결과조차 없을 때만(최초 실행 등) 원문 후보 기사를 그대로 노출하고 저장.
+    const fallback: DailyAnalysis = {
       trends: CATEGORIES.flatMap((category) =>
         pool[category].slice(0, PER_CATEGORY_COUNT),
       ),
       topTrends: [],
       generatedAt: new Date().toISOString(),
     };
+    await saveAnalysis(fallback);
+    return fallback;
   }
 }
-
-export const getDailyAnalysis = unstable_cache(
-  buildDailyAnalysis,
-  ["daily-trend-analysis-v7"],
-  { revalidate: 259200, tags: ["daily-analysis"] },
-);

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
-import { getExitCheck } from "@/lib/cospick";
+import { refreshExitCheck } from "@/lib/cospick";
 import { sendNtfy } from "@/lib/ntfy";
 
 export const maxDuration = 30;
@@ -11,14 +10,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  revalidateTag("exit-check", { expire: 0 });
-
   let items;
   try {
-    items = await getExitCheck();
+    items = await refreshExitCheck();
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
-    console.error("Failed to build exit check:", error);
+    console.error("Failed to refresh exit check:", error);
     await sendNtfy("코스픽 09:10 매도 체크 실패", message);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
