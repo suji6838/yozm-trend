@@ -1,6 +1,6 @@
 "use client";
 
-import type { CospickSnapshot, CospickCandidate } from "@/lib/cospick";
+import type { CospickSnapshot, CospickCandidate, ExitCheckItem } from "@/lib/cospick";
 import { COSPICK_SCORE_MAX } from "@/lib/cospick";
 
 function Sparkline({ values }: { values: number[] }) {
@@ -77,7 +77,36 @@ function formatUpdatedAt(iso: string) {
   ).padStart(2, "0")} 기준`;
 }
 
-export default function InvestmentTab({ cospick }: { cospick: CospickSnapshot | null }) {
+function ExitCheckRow({ item }: { item: ExitCheckItem }) {
+  const rising = item.changePct >= 0;
+  return (
+    <div className="flex items-center justify-between border-t border-zinc-50 py-2 first:border-t-0">
+      <div>
+        <p className="text-sm font-semibold text-zinc-900">{item.name}</p>
+        <p className="text-[11px] text-zinc-400">
+          {item.entryPrice.toLocaleString("ko-KR")}원 → {item.currentPrice.toLocaleString("ko-KR")}원
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`text-sm font-semibold ${rising ? "text-red-600" : "text-blue-600"}`}>
+          {rising ? "+" : ""}
+          {item.changePct}%
+        </span>
+        <span className="rounded-full bg-zinc-50 px-2 py-1 text-xs font-medium text-zinc-700">
+          {item.action}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default function InvestmentTab({
+  cospick,
+  exitCheck,
+}: {
+  cospick: CospickSnapshot | null;
+  exitCheck: ExitCheckItem[];
+}) {
   if (!cospick) {
     return (
       <div className="mt-6 rounded-3xl border border-zinc-100 bg-white p-8 text-center text-sm text-zinc-400 shadow-sm">
@@ -142,6 +171,19 @@ export default function InvestmentTab({ cospick }: { cospick: CospickSnapshot | 
           <li>-3% 이하 → 악재 여부 확인 후 즉시 대응</li>
         </ul>
       </div>
+
+      {exitCheck.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold text-zinc-700">
+            위 후보 매수가 대비 현재가 (15시 스캔가 기준, 실제 체결가와 다를 수 있음)
+          </p>
+          <div className="mt-1">
+            {exitCheck.map((item) => (
+              <ExitCheckRow key={item.code} item={item} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

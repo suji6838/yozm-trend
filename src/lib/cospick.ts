@@ -260,7 +260,7 @@ function classifyExit(pct: number): string {
   return "🔴 악재 확인 후 즉시 대응";
 }
 
-export async function checkExitStatus(): Promise<ExitCheckItem[]> {
+async function buildExitCheck(): Promise<ExitCheckItem[]> {
   const snapshot = await getCospickSnapshot();
   return Promise.all(
     snapshot.candidates.map(async (candidate) => {
@@ -278,3 +278,10 @@ export async function checkExitStatus(): Promise<ExitCheckItem[]> {
     }),
   );
 }
+
+// 화면에서도 같은 결과를 보여줄 수 있도록 캐싱 — 방문할 때마다 KIS를 다시 부르지 않게 5분 유지.
+// 09:10 cron이 revalidateTag로 강제 갱신하므로 그 시점 값은 항상 최신.
+export const getExitCheck = unstable_cache(buildExitCheck, ["exit-check-v1"], {
+  revalidate: 300,
+  tags: ["exit-check"],
+});

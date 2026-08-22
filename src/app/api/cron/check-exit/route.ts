@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkExitStatus } from "@/lib/cospick";
+import { revalidateTag } from "next/cache";
+import { getExitCheck } from "@/lib/cospick";
 import { sendNtfy } from "@/lib/ntfy";
 
 export const maxDuration = 30;
@@ -10,7 +11,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const items = await checkExitStatus();
+  revalidateTag("exit-check", { expire: 0 });
+  const items = await getExitCheck();
 
   if (items.length === 0) {
     await sendNtfy("코스픽 09:10 매도 체크", "어제 추천된 종목이 없습니다.");
