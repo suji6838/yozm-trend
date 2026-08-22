@@ -4,9 +4,10 @@ import Footer from "@/components/Footer";
 import HomeClient from "@/components/HomeClient";
 import { TRENDS } from "@/data/trends";
 import { getDailyAnalysis, DailyAnalysis } from "@/lib/dailyAnalysis";
+import { getInvestmentSnapshot, InvestmentSnapshot } from "@/lib/investmentAnalysis";
 
-// 캐시 미스 시 네이버+데이터랩+Gemini 2회 호출이 순차적으로 걸려 20~45초까지
-// 걸릴 수 있어서, Vercel 기본 실행시간 제한(약 10초)에 걸리지 않도록 연장.
+// 캐시 미스 시 네이버+데이터랩+Gemini 2회 호출, KIS 종목 조회가 순차적으로 걸려
+// 20~45초까지 걸릴 수 있어서, Vercel 기본 실행시간 제한(약 10초)에 걸리지 않도록 연장.
 export const maxDuration = 60;
 
 export default async function Home() {
@@ -17,13 +18,20 @@ export default async function Home() {
     console.error("Failed to build daily analysis:", error);
   }
 
+  let investment: InvestmentSnapshot | null = null;
+  try {
+    investment = await getInvestmentSnapshot();
+  } catch (error) {
+    console.error("Failed to build investment snapshot:", error);
+  }
+
   const trends = analysis && analysis.trends.length > 0 ? analysis.trends : TRENDS;
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50">
       <Header />
       <Suspense>
-        <HomeClient trends={trends} analysis={analysis} />
+        <HomeClient trends={trends} analysis={analysis} investment={investment} />
       </Suspense>
       <Footer />
     </div>

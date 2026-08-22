@@ -1,14 +1,25 @@
-// 코스픽(KOSPIK) 연동 목업 데이터.
-// 실제 시세/거래량/기술·수급 지표는 한국투자증권 KIS Open API 연동 후 이 파일을 대체할 예정.
-// 구조(필드)는 실데이터 전환 시 그대로 재사용할 수 있게 맞춰둠.
+// 추천 종목 유니버스(코드/이름/섹터)와 백테스트 통계 예시값.
+// 시세·거래량·추이·점수는 src/lib/investmentAnalysis.ts에서 한국투자증권 KIS Open API로 실시간 조회함.
+
+export type StockMeta = { code: string; name: string; sector: string };
+
+export const STOCK_UNIVERSE: StockMeta[] = [
+  { code: "005930", name: "삼성전자", sector: "반도체" },
+  { code: "000660", name: "SK하이닉스", sector: "반도체" },
+  { code: "035420", name: "NAVER", sector: "인터넷" },
+  { code: "051910", name: "LG화학", sector: "2차전지" },
+  { code: "005380", name: "현대차", sector: "자동차" },
+];
 
 export type StockPick = {
   code: string;
   name: string;
   sector: string;
-  score: number; // 0~100 추천점수
-  trend: number[]; // 최근 20일 종가 흐름(정규화 값, 스파크라인용)
-  volumeLabel: string; // 예: "12,483천"
+  score: number; // 0~100, 20일 모멘텀 기반 (실전 투자 전략 아님)
+  trend: number[]; // 최근 20일 종가(원)
+  volumeLabel: string; // 예: "18,102천"
+  price: number; // 현재가(원)
+  changePct: number; // 전일 대비율(%)
 };
 
 export type InvestmentStats = {
@@ -16,21 +27,20 @@ export type InvestmentStats = {
   avgReturnPerTrade: number; // %
   cumulativeReturn: number; // %
   maxDrawdown: number; // % (음수)
-  updatedAt: string; // 표시용 문자열
   nextSignal: {
-    label: string; // 예: "다음 거래일 09:00"
+    label: string;
     takeProfitPct: number;
     stopLossPct: number;
     note: string;
   };
 };
 
-export const INVESTMENT_STATS: InvestmentStats = {
+// 실제 백테스트 엔진이 아직 없어 고정된 예시 값. 전략 구현 전까지는 참고용으로만 표시.
+export const EXAMPLE_INVESTMENT_STATS: InvestmentStats = {
   backtestWinRate: 68.4,
   avgReturnPerTrade: 1.86,
   cumulativeReturn: 24.7,
   maxDrawdown: -6.3,
-  updatedAt: "15:00 기준 (예시 데이터)",
   nextSignal: {
     label: "다음 거래일 09:00",
     takeProfitPct: 3.0,
@@ -38,46 +48,3 @@ export const INVESTMENT_STATS: InvestmentStats = {
     note: "추세 악화 감지 시 자동 재검토",
   },
 };
-
-export const STOCK_PICKS: StockPick[] = [
-  {
-    code: "005930",
-    name: "삼성전자",
-    sector: "반도체",
-    score: 94,
-    trend: [61, 63, 60, 65, 68, 66, 70, 72, 71, 75, 74, 78, 80, 79, 83, 85, 84, 88, 90, 92],
-    volumeLabel: "18,102천",
-  },
-  {
-    code: "000660",
-    name: "SK하이닉스",
-    sector: "반도체",
-    score: 91,
-    trend: [55, 58, 57, 60, 62, 59, 64, 66, 68, 65, 70, 72, 71, 75, 77, 76, 80, 82, 81, 85],
-    volumeLabel: "9,443천",
-  },
-  {
-    code: "035420",
-    name: "NAVER",
-    sector: "인터넷",
-    score: 88,
-    trend: [70, 68, 71, 69, 72, 74, 73, 76, 75, 78, 77, 80, 79, 82, 81, 84, 83, 86, 85, 88],
-    volumeLabel: "1,988천",
-  },
-  {
-    code: "051910",
-    name: "LG화학",
-    sector: "2차전지",
-    score: 85,
-    trend: [80, 78, 76, 79, 77, 75, 78, 76, 74, 77, 75, 78, 80, 79, 82, 81, 84, 83, 86, 85],
-    volumeLabel: "743천",
-  },
-  {
-    code: "005380",
-    name: "현대차",
-    sector: "자동차",
-    score: 83,
-    trend: [65, 66, 64, 67, 69, 68, 70, 69, 72, 71, 73, 75, 74, 76, 78, 77, 79, 81, 80, 83],
-    volumeLabel: "2,146천",
-  },
-];
