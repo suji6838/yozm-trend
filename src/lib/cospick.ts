@@ -4,6 +4,7 @@ import {
   getVolumeRankUniverse,
   getIndexAboveMa20,
   getDailyChart,
+  getCurrentPrice,
   KisVolumeRankItem,
 } from "./kis";
 
@@ -241,3 +242,39 @@ export const getCospickSnapshot = unstable_cache(
   ["cospick-snapshot-v1"],
   { revalidate: 86400, tags: ["cospick-snapshot"] },
 );
+
+// ── 다음날 09:10 매도 체크 (전날 15시 스캔가를 매수가로 가정) ──────────
+export type ExitCheckItem = {
+  code: string;
+  name: string;
+  entryPrice: number;
+  currentPrice: number;
+  changePct: number;
+  action: string;
+};
+
+function classifyExit(pct: number): string {
+  if (pct >= 3) return "🟢 전량 익절";
+  if (pct >= -1.5) return "🟡 09:10 전량 매도";
+  if (pct >= -3) return "🟠 원칙적으로 손절";
+  return "🔴 악재 확인 후 즉시 대응";
+}
+
+export async function checkExitStatus(): Promise<ExitCheckItem[]> {
+  const snapshot = await getCospickSnapshot();
+  return Promise.all(
+    snapshot.candidates.map(async (candidate) => {
+      const price = await getCurrentPrice(candidate.code);
+      const current = Number(price.stck_prpr);
+      const pct = ((current - candidate.price) / candidate.price) * 100;
+      return {
+        code: candidate.code,
+        name: candidate.name,
+        entryPrice: candidate.price,
+        currentPrice: current,
+        changePct: Math.round(pct * 100) / 100,
+        action: classifyExit(pct),
+      };
+    }),
+  );
+}
