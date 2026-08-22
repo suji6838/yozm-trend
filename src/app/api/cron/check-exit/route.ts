@@ -12,7 +12,16 @@ export async function GET(req: NextRequest) {
   }
 
   revalidateTag("exit-check", { expire: 0 });
-  const items = await getExitCheck();
+
+  let items;
+  try {
+    items = await getExitCheck();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    console.error("Failed to build exit check:", error);
+    await sendNtfy("코스픽 09:10 매도 체크 실패", message);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 
   if (items.length === 0) {
     await sendNtfy("코스픽 09:10 매도 체크", "어제 추천된 종목이 없습니다.");
