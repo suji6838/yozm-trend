@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CATEGORIES, CATEGORY_ICONS, Category, INVESTMENT_TAB, Trend } from "@/data/trends";
 import type { DailyAnalysis } from "@/lib/dailyAnalysis";
-import type { InvestmentSnapshot } from "@/lib/investmentAnalysis";
+import type { CospickSnapshot } from "@/lib/cospick";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
 import TrendClusterCard from "./TrendClusterCard";
@@ -19,11 +19,11 @@ function formatTodayLabel() {
 export default function HomeClient({
   trends,
   analysis,
-  investment,
+  cospick,
 }: {
   trends: Trend[];
   analysis: DailyAnalysis | null;
-  investment: InvestmentSnapshot | null;
+  cospick: CospickSnapshot | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -110,7 +110,7 @@ export default function HomeClient({
         </div>
       </div>
 
-      {activeCategory === INVESTMENT_TAB.label && <InvestmentTab investment={investment} />}
+      {activeCategory === INVESTMENT_TAB.label && <InvestmentTab cospick={cospick} />}
 
       {activeCategory === "전체" && analysis && analysis.topTrends.length > 0 && (
         <div className="mt-6">

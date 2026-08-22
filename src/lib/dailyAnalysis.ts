@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { put, list } from "@vercel/blob";
+import { put, get } from "@vercel/blob";
 import { CATEGORIES, Category, Trend } from "@/data/trends";
 import { getCandidatePool, getDatalabSearchTrend } from "./naver";
 import { generateWithGemini } from "./gemini";
@@ -339,7 +339,7 @@ const LAST_GOOD_PATHNAME = "daily-analysis-latest.json";
 async function saveLastGoodAnalysis(analysis: DailyAnalysis) {
   try {
     await put(LAST_GOOD_PATHNAME, JSON.stringify(analysis), {
-      access: "public",
+      access: "private",
       addRandomSuffix: false,
       allowOverwrite: true,
       contentType: "application/json",
@@ -351,12 +351,10 @@ async function saveLastGoodAnalysis(analysis: DailyAnalysis) {
 
 async function loadLastGoodAnalysis(): Promise<DailyAnalysis | null> {
   try {
-    const { blobs } = await list({ prefix: LAST_GOOD_PATHNAME, limit: 1 });
-    const blob = blobs[0];
-    if (!blob) return null;
-    const res = await fetch(blob.url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json()) as DailyAnalysis;
+    const result = await get(LAST_GOOD_PATHNAME, { access: "private" });
+    if (!result || result.statusCode !== 200) return null;
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as DailyAnalysis;
   } catch (error) {
     console.error("Failed to load last-good daily analysis:", error);
     return null;

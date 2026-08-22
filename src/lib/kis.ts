@@ -53,7 +53,7 @@ function sleep(ms: number) {
 
 // 실전투자 계정은 초당 호출 건수 제한이 빡빡해서(EGW00201), 요청을 한 번에
 // 하나씩만 내보내도록 큐로 직렬화하고 호출 사이 최소 간격을 둔다.
-const MIN_CALL_INTERVAL_MS = 1100;
+const MIN_CALL_INTERVAL_MS = 800;
 let requestQueue: Promise<void> = Promise.resolve();
 let lastCallAt = 0;
 
@@ -136,11 +136,11 @@ function yyyymmdd(d: Date) {
   return d.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
-// 주말/공휴일 감안해 60일 범위로 조회 후 최근 거래일 count개만 사용
+// 주말/공휴일 감안해 count의 2배(최소 60일) 범위로 조회 후 최근 거래일 count개만 사용
 export async function getDailyChart(stockCode: string, count = 20) {
   const end = new Date();
   const start = new Date();
-  start.setDate(end.getDate() - 60);
+  start.setDate(end.getDate() - Math.max(60, count * 2));
 
   const data = (await kisFetch(
     "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
@@ -167,4 +167,70 @@ export async function getDailyChart(stockCode: string, count = 20) {
         volume: Number(d.acml_vol),
       }),
     );
+}
+
+export type KisVolumeRankItem = {
+  code: string;
+  name: string;
+  price: number;
+  changePct: number;
+  volume: number;
+  tradingValue: number; // 당일 누적 거래대금(원)
+};
+
+// 코스피+코스닥 통합, 거래대금순 상위 종목 (관리종목/거래정지/ETF/ETN/SPAC 등 제외)
+export async function getVolumeRankUniverse(limit = 20) {
+  const data = (await kisFetch(
+    "/uapi/domestic-stock/v1/quotations/volume-rank",
+    "FHPST01710000",
+    {
+      FID_COND_MRKT_DIV_CODE: "J",
+      FID_COND_SCR_DIV_CODE: "20171",
+      FID_INPUT_ISCD: "0000",
+      FID_DIV_CLS_CODE: "1",
+      FID_BLNG_CLS_CODE: "3",
+      FID_TRGT_CLS_CODE: "111111111",
+      FID_TRGT_EXLS_CLS_CODE: "1111111101",
+      FID_INPUT_PRICE_1: "",
+      FID_INPUT_PRICE_2: "",
+      FID_VOL_CNT: "",
+      FID_INPUT_DATE_1: "",
+    },
+  )) as {
+    output: {
+      hts_kor_isnm: string;
+      mksc_shrn_iscd: string;
+      stck_prpr: string;
+      prdy_ctrt: string;
+      acml_vol: string;
+      acml_tr_pbmn: string;
+    }[];
+  };
+
+  return data.output.slice(0, limit).map(
+    (d): KisVolumeRankItem => ({
+      code: d.mksc_shrn_iscd,
+      name: d.hts_kor_isnm,
+      price: Number(d.stck_prpr),
+      changePct: Number(d.prdy_ctrt),
+      volume: Number(d.acml_vol),
+      tradingValue: Number(d.acml_tr_pbmn),
+    }),
+  );
+}
+
+// 코스피(0001)/코스닥(1001) 지수가 20일 이격도 기준으로 20일선 위에 있는지
+export async function getIndexAboveMa20(indexCode: "0001" | "1001") {
+  const data = (await kisFetch(
+    "/uapi/domestic-stock/v1/quotations/inquire-index-daily-price",
+    "FHPUP02120000",
+    {
+      FID_PERIOD_DIV_CODE: "D",
+      FID_COND_MRKT_DIV_CODE: "U",
+      FID_INPUT_ISCD: indexCode,
+      FID_INPUT_DATE_1: yyyymmdd(new Date()),
+    },
+  )) as { output1: { d20_dsrt: string } };
+
+  return Number(data.output1.d20_dsrt) >= 100;
 }
