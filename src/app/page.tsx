@@ -5,6 +5,7 @@ import HomeClient from "@/components/HomeClient";
 import { TRENDS } from "@/data/trends";
 import { getDailyAnalysis, DailyAnalysis } from "@/lib/dailyAnalysis";
 import { getCospickSnapshot, CospickSnapshot, getExitCheck, ExitCheckItem } from "@/lib/cospick";
+import { getAdminUser } from "@/lib/adminAuth";
 
 // getDailyAnalysis/getCospickSnapshot/getExitCheck는 각자 cron이 미리 채워둔
 // Vercel Blob만 읽기 때문에(네이버/Gemini/KIS를 직접 호출하지 않음) 항상 빠르다.
@@ -25,18 +26,25 @@ export default async function Home() {
     console.error("Failed to build daily analysis:", error);
   }
 
-  let cospick: CospickSnapshot | null = null;
-  try {
-    cospick = await getCospickSnapshot();
-  } catch (error) {
-    console.error("Failed to build cospick snapshot:", error);
-  }
+  // 코스픽(매수/매도 추천 종목)은 아직 나만 보는 개인 트래킹용이라 관리자 계정에만
+  // 노출한다 — 데이터 자체를 관리자가 아니면 서버에서부터 아예 안 가져온다(HTML에도 안 실림).
+  const admin = await getAdminUser();
+  const isAdmin = admin !== null;
 
+  let cospick: CospickSnapshot | null = null;
   let exitCheck: ExitCheckItem[] = [];
-  try {
-    exitCheck = await getExitCheck();
-  } catch (error) {
-    console.error("Failed to build exit check:", error);
+  if (isAdmin) {
+    try {
+      cospick = await getCospickSnapshot();
+    } catch (error) {
+      console.error("Failed to build cospick snapshot:", error);
+    }
+
+    try {
+      exitCheck = await getExitCheck();
+    } catch (error) {
+      console.error("Failed to build exit check:", error);
+    }
   }
 
   const trends = analysis && analysis.trends.length > 0 ? analysis.trends : TRENDS;
@@ -45,7 +53,13 @@ export default async function Home() {
     <div className="flex min-h-screen flex-col bg-zinc-50">
       <Header />
       <Suspense>
-        <HomeClient trends={trends} analysis={analysis} cospick={cospick} exitCheck={exitCheck} />
+        <HomeClient
+          trends={trends}
+          analysis={analysis}
+          cospick={cospick}
+          exitCheck={exitCheck}
+          isAdmin={isAdmin}
+        />
       </Suspense>
       <Footer />
     </div>

@@ -21,17 +21,19 @@ export default function HomeClient({
   analysis,
   cospick,
   exitCheck,
+  isAdmin,
 }: {
   trends: Trend[];
   analysis: DailyAnalysis | null;
   cospick: CospickSnapshot | null;
   exitCheck: ExitCheckItem[];
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const categoryParam = searchParams.get("category");
   const activeCategory: Category | typeof INVESTMENT_TAB.label | "전체" =
-    categoryParam === INVESTMENT_TAB.label
+    categoryParam === INVESTMENT_TAB.label && isAdmin
       ? INVESTMENT_TAB.label
       : categoryParam && (CATEGORIES as string[]).includes(categoryParam)
         ? (categoryParam as Category)
@@ -97,22 +99,24 @@ export default function HomeClient({
               {category}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setActiveCategory(INVESTMENT_TAB.label)}
-            className={
-              activeCategory === INVESTMENT_TAB.label
-                ? "rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-blue-700 shadow-sm"
-                : "rounded-full border border-white/30 px-4 py-1.5 text-sm text-white hover:bg-white/10"
-            }
-          >
-            <span className="mr-1">{INVESTMENT_TAB.icon}</span>
-            {INVESTMENT_TAB.label}
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveCategory(INVESTMENT_TAB.label)}
+              className={
+                activeCategory === INVESTMENT_TAB.label
+                  ? "rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-blue-700 shadow-sm"
+                  : "rounded-full border border-white/30 px-4 py-1.5 text-sm text-white hover:bg-white/10"
+              }
+            >
+              <span className="mr-1">{INVESTMENT_TAB.icon}</span>
+              {INVESTMENT_TAB.label}
+            </button>
+          )}
         </div>
       </div>
 
-      {activeCategory === INVESTMENT_TAB.label && (
+      {isAdmin && activeCategory === INVESTMENT_TAB.label && (
         <InvestmentTab cospick={cospick} exitCheck={exitCheck} />
       )}
 

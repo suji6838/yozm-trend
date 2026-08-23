@@ -5,14 +5,12 @@ import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { CATEGORIES, Category } from "@/data/trends";
 import { SUBSCRIPTION_STORAGE_KEY } from "@/lib/storageKeys";
+import { NEWSLETTER_ENABLED } from "@/lib/config";
 
 type Subscription = {
   email: string;
   categories: Category[];
 };
-
-// 발신 도메인(Resend) 인증 전까지 구독 폼을 비활성화. 도메인 인증 후 true로.
-const NEWSLETTER_ENABLED = false;
 
 export default function SubscribeClient() {
   const { isLoaded, isSignedIn, user } = useUser();

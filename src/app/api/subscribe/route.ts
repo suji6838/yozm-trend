@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { upsertSubscriber, listSubscribers } from "@/lib/resend";
+import { NEWSLETTER_ENABLED } from "@/lib/config";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
+  if (!NEWSLETTER_ENABLED) {
+    return NextResponse.json(
+      { error: "newsletter subscription is not open yet" },
+      { status: 503 },
+    );
+  }
+
   const { email } = await req.json();
   if (!email || typeof email !== "string" || !EMAIL_REGEX.test(email)) {
     return NextResponse.json(
