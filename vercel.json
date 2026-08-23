@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/refresh-cospick",
-      "schedule": "50 5 * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/check-exit",
