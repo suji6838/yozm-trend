@@ -219,6 +219,59 @@ export async function getVolumeRankUniverse(limit = 20) {
   );
 }
 
+export type KisOverseasPrice = {
+  last: string; // 현재가
+  base: string; // 전일종가
+  diff: string; // 대비
+  rate: string; // 등락율
+  tvol: string; // 거래량
+};
+
+export async function getOverseasCurrentPrice(excd: string, symb: string) {
+  const data = (await kisFetch(
+    "/uapi/overseas-price/v1/quotations/price",
+    "HHDFS00000300",
+    { AUTH: "", EXCD: excd, SYMB: symb },
+  )) as { output: KisOverseasPrice };
+  return data.output;
+}
+
+// 일자별 등락률(rate)이 output2 각 행에 이미 포함돼 있어, 현재가를 별도 호출하지 않고도
+// 최근일 changePct를 구할 수 있다.
+export type KisOverseasDailyBar = {
+  date: string;
+  close: number;
+  volume: number;
+  changePct: number;
+};
+
+// 해외주식은 국내와 달리 거래대금순위 조회 API가 없어 고정 종목 리스트를 순회하며
+// 종목별 일별시세만 조회한다. GUBN "0"=일봉, MODP "0"=수정주가 미반영.
+export async function getOverseasDailyChart(excd: string, symb: string, count = 90) {
+  const data = (await kisFetch(
+    "/uapi/overseas-price/v1/quotations/dailyprice",
+    "HHDFS76240000",
+    { AUTH: "", EXCD: excd, SYMB: symb, GUBN: "0", BYMD: "", MODP: "0" },
+  )) as { output2: { xymd: string; clos: string; tvol: string; rate: string; sign: string }[] };
+
+  // output2는 최신일→과거 순으로 내려오므로, 최근 count개를 골라 과거→최신 순으로 뒤집음
+  // sign: 1/2=상승, 4/5=하락 — rate 절대값에 부호를 붙여준다.
+  return data.output2
+    .filter((d) => d.xymd)
+    .slice(0, count)
+    .reverse()
+    .map((d): KisOverseasDailyBar => {
+      const rate = Math.abs(Number(d.rate));
+      const falling = d.sign === "4" || d.sign === "5";
+      return {
+        date: d.xymd,
+        close: Number(d.clos),
+        volume: Number(d.tvol),
+        changePct: falling ? -rate : rate,
+      };
+    });
+}
+
 // 코스피(0001)/코스닥(1001) 지수가 20일 이격도 기준으로 20일선 위에 있는지
 export async function getIndexAboveMa20(indexCode: "0001" | "1001") {
   const data = (await kisFetch(

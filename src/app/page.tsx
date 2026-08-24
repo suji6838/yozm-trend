@@ -5,6 +5,7 @@ import HomeClient from "@/components/HomeClient";
 import { TRENDS } from "@/data/trends";
 import { getDailyAnalysis, DailyAnalysis } from "@/lib/dailyAnalysis";
 import { getCospickSnapshot, CospickSnapshot, getExitCheck, ExitCheckItem } from "@/lib/cospick";
+import { getOverseasCospickSnapshot, OverseasCospickSnapshot } from "@/lib/cospickOverseas";
 import { getAdminUser } from "@/lib/adminAuth";
 
 // getDailyAnalysis/getCospickSnapshot/getExitCheck는 각자 cron이 미리 채워둔
@@ -33,6 +34,7 @@ export default async function Home() {
 
   let cospick: CospickSnapshot | null = null;
   let exitCheck: ExitCheckItem[] = [];
+  let overseasCospick: OverseasCospickSnapshot | null = null;
   if (isAdmin) {
     try {
       cospick = await getCospickSnapshot();
@@ -44,6 +46,12 @@ export default async function Home() {
       exitCheck = await getExitCheck();
     } catch (error) {
       console.error("Failed to build exit check:", error);
+    }
+
+    try {
+      overseasCospick = await getOverseasCospickSnapshot();
+    } catch (error) {
+      console.error("Failed to build overseas cospick snapshot:", error);
     }
   }
 
@@ -58,6 +66,7 @@ export default async function Home() {
           analysis={analysis}
           cospick={cospick}
           exitCheck={exitCheck}
+          overseasCospick={overseasCospick}
           isAdmin={isAdmin}
         />
       </Suspense>

@@ -6,11 +6,15 @@
     },
     {
       "path": "/api/cron/refresh-cospick",
-      "schedule": "0 6 * * 1-5"
+      "schedule": "30 5 * * 1-5"
     },
     {
       "path": "/api/cron/check-exit",
       "schedule": "10 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/refresh-cospick-overseas",
+      "schedule": "0 22 * * 1-5"
     }
   ]
 }

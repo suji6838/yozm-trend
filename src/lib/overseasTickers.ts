@@ -1,0 +1,61 @@
+// 해외주식 코스픽 스캔 대상 — 나스닥 상위 30 + S&P500 시가총액 상위 30을 중복 제거해 고정.
+// KIS 해외 API는 국내처럼 거래대금순위를 자동으로 뽑아주지 않아 직접 관리해야 한다.
+// 시가총액 순위는 시간이 지나며 바뀌므로, 최신 구성으로 갱신하고 싶으면 이 배열만 고치면 된다.
+// exchange는 KIS EXCD 파라미터 값(나스닥 NAS / 뉴욕 NYS).
+export type OverseasTicker = { symbol: string; exchange: "NAS" | "NYS"; name: string };
+
+export const OVERSEAS_UNIVERSE: OverseasTicker[] = [
+  // ── 나스닥 상위 30 ──────────────────────────────────────────────
+  { symbol: "AAPL", exchange: "NAS", name: "Apple" },
+  { symbol: "MSFT", exchange: "NAS", name: "Microsoft" },
+  { symbol: "NVDA", exchange: "NAS", name: "NVIDIA" },
+  { symbol: "AMZN", exchange: "NAS", name: "Amazon" },
+  { symbol: "GOOGL", exchange: "NAS", name: "Alphabet" },
+  { symbol: "META", exchange: "NAS", name: "Meta Platforms" },
+  { symbol: "AVGO", exchange: "NAS", name: "Broadcom" },
+  { symbol: "TSLA", exchange: "NAS", name: "Tesla" },
+  { symbol: "COST", exchange: "NAS", name: "Costco" },
+  { symbol: "NFLX", exchange: "NAS", name: "Netflix" },
+  { symbol: "ASML", exchange: "NAS", name: "ASML Holding" },
+  { symbol: "AMD", exchange: "NAS", name: "Advanced Micro Devices" },
+  { symbol: "PEP", exchange: "NAS", name: "PepsiCo" },
+  { symbol: "ADBE", exchange: "NAS", name: "Adobe" },
+  { symbol: "LIN", exchange: "NAS", name: "Linde" },
+  { symbol: "CSCO", exchange: "NAS", name: "Cisco" },
+  { symbol: "TMUS", exchange: "NAS", name: "T-Mobile US" },
+  { symbol: "INTU", exchange: "NAS", name: "Intuit" },
+  { symbol: "QCOM", exchange: "NAS", name: "Qualcomm" },
+  { symbol: "TXN", exchange: "NAS", name: "Texas Instruments" },
+  { symbol: "AMAT", exchange: "NAS", name: "Applied Materials" },
+  { symbol: "ISRG", exchange: "NAS", name: "Intuitive Surgical" },
+  { symbol: "CMCSA", exchange: "NAS", name: "Comcast" },
+  { symbol: "HON", exchange: "NAS", name: "Honeywell" },
+  { symbol: "BKNG", exchange: "NAS", name: "Booking Holdings" },
+  { symbol: "VRTX", exchange: "NAS", name: "Vertex Pharmaceuticals" },
+  { symbol: "PANW", exchange: "NAS", name: "Palo Alto Networks" },
+  { symbol: "ADP", exchange: "NAS", name: "Automatic Data Processing" },
+  { symbol: "GILD", exchange: "NAS", name: "Gilead Sciences" },
+  { symbol: "MU", exchange: "NAS", name: "Micron Technology" },
+
+  // ── S&P500 시가총액 상위 30 중 나스닥 리스트와 겹치지 않는 종목 ──────
+  { symbol: "BRKB", exchange: "NYS", name: "Berkshire Hathaway" },
+  { symbol: "JPM", exchange: "NYS", name: "JPMorgan Chase" },
+  { symbol: "WMT", exchange: "NYS", name: "Walmart" },
+  { symbol: "LLY", exchange: "NYS", name: "Eli Lilly" },
+  { symbol: "V", exchange: "NYS", name: "Visa" },
+  { symbol: "ORCL", exchange: "NYS", name: "Oracle" },
+  { symbol: "MA", exchange: "NYS", name: "Mastercard" },
+  { symbol: "XOM", exchange: "NYS", name: "ExxonMobil" },
+  { symbol: "JNJ", exchange: "NYS", name: "Johnson & Johnson" },
+  { symbol: "HD", exchange: "NYS", name: "Home Depot" },
+  { symbol: "PG", exchange: "NYS", name: "Procter & Gamble" },
+  { symbol: "ABBV", exchange: "NYS", name: "AbbVie" },
+  { symbol: "BAC", exchange: "NYS", name: "Bank of America" },
+  { symbol: "KO", exchange: "NYS", name: "Coca-Cola" },
+  { symbol: "UNH", exchange: "NYS", name: "UnitedHealth" },
+  { symbol: "CVX", exchange: "NYS", name: "Chevron" },
+  { symbol: "WFC", exchange: "NYS", name: "Wells Fargo" },
+  { symbol: "CRM", exchange: "NYS", name: "Salesforce" },
+  { symbol: "IBM", exchange: "NYS", name: "IBM" },
+  { symbol: "GE", exchange: "NYS", name: "GE Aerospace" },
+];

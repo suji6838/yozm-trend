@@ -2,6 +2,12 @@
 
 import type { CospickSnapshot, CospickCandidate, ExitCheckItem } from "@/lib/cospick";
 import { COSPICK_SCORE_MAX } from "@/lib/cospick";
+import type {
+  OverseasCospickSnapshot,
+  OverseasCandidate,
+  OverseasExitItem,
+} from "@/lib/cospickOverseas";
+import { OVERSEAS_SCORE_MAX } from "@/lib/cospickOverseas";
 
 function Sparkline({ values }: { values: number[] }) {
   const min = Math.min(...values);
@@ -36,6 +42,11 @@ function CandidateCard({ candidate, rank }: { candidate: CospickCandidate; rank:
   const rising = candidate.changePct >= 0;
   return (
     <article className="flex flex-col gap-3 rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-zinc-200/60">
+      {candidate.caution && (
+        <span className="w-fit rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-600">
+          ⚠️ 주의 종목 — {candidate.caution}
+        </span>
+      )}
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs text-zinc-400">{candidate.code}</p>
@@ -100,12 +111,83 @@ function ExitCheckRow({ item }: { item: ExitCheckItem }) {
   );
 }
 
+function OverseasCandidateCard({
+  candidate,
+  rank,
+}: {
+  candidate: OverseasCandidate;
+  rank: number;
+}) {
+  const rising = candidate.changePct >= 0;
+  return (
+    <article className="flex flex-col gap-3 rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-zinc-200/60">
+      {candidate.caution && (
+        <span className="w-fit rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-600">
+          ⚠️ 주의 종목 — {candidate.caution}
+        </span>
+      )}
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-zinc-400">{candidate.exchange}</p>
+          <p className="mt-0.5 text-base font-semibold text-zinc-900">
+            {candidate.symbol} · {candidate.name}
+          </p>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-sm font-bold text-blue-700">
+            {candidate.score.total}/{OVERSEAS_SCORE_MAX}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-lg font-bold text-zinc-900">${candidate.price.toFixed(2)}</span>
+        <span className={`text-xs font-semibold ${rising ? "text-red-600" : "text-blue-600"}`}>
+          {rising ? "+" : ""}
+          {candidate.changePct}%
+        </span>
+      </div>
+      <Sparkline values={candidate.trend} />
+      <ul className="space-y-1 border-t border-zinc-50 pt-2 text-[11px] text-zinc-500">
+        {candidate.reasons.map((reason, i) => (
+          <li key={i}>· {reason}</li>
+        ))}
+      </ul>
+      <span className="text-[10px] font-medium text-zinc-300">#{rank}</span>
+    </article>
+  );
+}
+
+function OverseasExitRow({ item }: { item: OverseasExitItem }) {
+  const rising = item.changePct >= 0;
+  return (
+    <div className="flex items-center justify-between border-t border-zinc-50 py-2 first:border-t-0">
+      <div>
+        <p className="text-sm font-semibold text-zinc-900">{item.name}</p>
+        <p className="text-[11px] text-zinc-400">
+          ${item.entryPrice.toFixed(2)} → ${item.currentPrice.toFixed(2)}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`text-sm font-semibold ${rising ? "text-red-600" : "text-blue-600"}`}>
+          {rising ? "+" : ""}
+          {item.changePct}%
+        </span>
+        <span className="rounded-full bg-zinc-50 px-2 py-1 text-xs font-medium text-zinc-700">
+          {item.action}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function InvestmentTab({
   cospick,
   exitCheck,
+  overseasCospick,
 }: {
   cospick: CospickSnapshot | null;
   exitCheck: ExitCheckItem[];
+  overseasCospick: OverseasCospickSnapshot | null;
 }) {
   if (!cospick) {
     return (
@@ -122,7 +204,7 @@ export default function InvestmentTab({
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 px-6 py-8 shadow-lg shadow-indigo-200 sm:px-8">
         <div className="pointer-events-none absolute -top-14 -right-14 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
         <p className="relative text-xs font-semibold tracking-wide text-blue-100">
-          코스픽 · 15시 매수 후보 스크리닝
+          코스픽 · 14시 30분 매수 후보 스크리닝
         </p>
         <h2 className="relative mt-2 text-2xl font-bold text-white sm:text-3xl">
           거래대금 상위 {scanned}개 중 오늘의 후보를 골랐습니다.
@@ -175,7 +257,7 @@ export default function InvestmentTab({
       {exitCheck.length > 0 && (
         <div className="mt-4 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold text-zinc-700">
-            위 후보 매수가 대비 현재가 (15시 스캔가 기준, 실제 체결가와 다를 수 있음)
+            위 후보 매수가 대비 현재가 (14시 30분 스캔가 기준, 실제 체결가와 다를 수 있음)
           </p>
           <div className="mt-1">
             {exitCheck.map((item) => (
@@ -184,6 +266,70 @@ export default function InvestmentTab({
           </div>
         </div>
       )}
+
+      <div className="mt-8">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 px-6 py-8 shadow-lg shadow-indigo-200 sm:px-8">
+          <div className="pointer-events-none absolute -top-14 -right-14 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+          <p className="relative text-xs font-semibold tracking-wide text-blue-100">
+            해외 코스픽 · 전일 종가 기준 매수 후보 스크리닝
+          </p>
+          <h2 className="relative mt-2 text-2xl font-bold text-white sm:text-3xl">
+            나스닥 상위 30 + S&P500 시가총액 상위 30 중 오늘의 후보를 골랐습니다.
+          </h2>
+          <p className="relative mt-2 max-w-xl text-sm text-blue-100">
+            실시간 시세가 아니라 미국장 마감 후 전일 종가로 계산합니다(한국시간 07:00 스캔).
+            추세·거래량(만점 {OVERSEAS_SCORE_MAX}점)만 반영한 버전입니다. 급등(+15%↑)·급락(-7%↓)
+            종목은 후보에서 제외되지만, 3개 미만이면 주의 배지와 함께 보충됩니다.
+          </p>
+        </div>
+
+        {!overseasCospick ? (
+          <div className="mt-6 rounded-3xl border border-zinc-100 bg-white p-8 text-center text-sm text-zinc-400 shadow-sm">
+            지금은 해외 스크리닝 데이터를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.
+          </div>
+        ) : (
+          <>
+            <div className="mt-6 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-xs">
+                  🌎
+                </span>
+                <span className="text-xs font-semibold tracking-wide text-indigo-600">
+                  오늘의 해외 매수 후보 {overseasCospick.candidates.length}
+                </span>
+              </div>
+              <span className="text-xs text-zinc-400">
+                {formatUpdatedAt(overseasCospick.generatedAt)}
+              </span>
+            </div>
+
+            {overseasCospick.candidates.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-zinc-100 bg-white p-8 text-center text-sm text-zinc-400 shadow-sm">
+                오늘은 조건을 만족하는 해외 매수 후보가 없습니다.
+              </div>
+            ) : (
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {overseasCospick.candidates.map((candidate, i) => (
+                  <OverseasCandidateCard key={candidate.symbol} candidate={candidate} rank={i + 1} />
+                ))}
+              </div>
+            )}
+
+            {overseasCospick.exitCheck.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold text-zinc-700">
+                  어제 추천 종목 매수가 대비 오늘 종가 (전일 종가 기준, 실제 체결가와 다를 수 있음)
+                </p>
+                <div className="mt-1">
+                  {overseasCospick.exitCheck.map((item) => (
+                    <OverseasExitRow key={item.symbol} item={item} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

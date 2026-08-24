@@ -22,13 +22,14 @@ const TRADING_VALUE_GOOD = 100_000_000_000; // 1,000억: B 거래대금 가점 �
 const SURGE_LIMIT_PCT = 15; // 당일 +15% 이상 급등 → 매수금지
 const CRASH_LIMIT_PCT = -7; // 당일 -7% 이하 급락 → 매수금지
 
-function sma(values: number[], period: number) {
+// 통화 무관 순수 함수라 해외판(cospickOverseas.ts)에서도 그대로 재사용한다.
+export function sma(values: number[], period: number) {
   const slice = values.slice(-period);
   if (slice.length === 0) return 0;
   return slice.reduce((a, b) => a + b, 0) / slice.length;
 }
 
-function scoreTrend(closes: number[]) {
+export function scoreTrend(closes: number[]) {
   const reasons: string[] = [];
   let score = 0;
 
@@ -126,6 +127,7 @@ export type CospickCandidate = {
   trend: number[]; // 최근 20일 종가(스파크라인용)
   score: { trend: number; volume: number; marketMood: number; total: number };
   reasons: string[];
+  caution?: string; // 급등락/유동성 부족 등으로 원래는 제외 대상이었지만 후보 부족으로 보충된 경우 사유
 };
 
 export type CospickSnapshot = {
@@ -135,12 +137,13 @@ export type CospickSnapshot = {
   generatedAt: string;
 };
 
+// 급등락/유동성 부족 종목도 차트 데이터가 있으면 점수까지 계산해 반환한다(null은 데이터
+// 조회 자체가 실패한 경우만). 최종 후보가 3개 미만이면 이런 종목을 caution과 함께 보충한다 —
+// 변동성 큰 날 거래대금 상위 종목이 전부 제외돼 매수 후보가 0개로 나오던 문제의 수정.
 async function evaluateCandidate(
   item: KisVolumeRankItem,
   mood: ReturnType<typeof scoreMarketMood>,
 ): Promise<CospickCandidate | null> {
-  if (checkExclusion(item)) return null;
-
   const chart = await getDailyChart(item.code, 90);
   if (chart.length < 61) return null;
 
@@ -151,6 +154,10 @@ async function evaluateCandidate(
   const volume = scoreVolume(volumes, item.tradingValue);
   const total = Math.round(trend.score + volume.score + mood.score);
 
+  const exclusionReason = checkExclusion(item);
+  const reasons = [...trend.reasons, ...volume.reasons, ...mood.reasons];
+  if (exclusionReason) reasons.unshift(`⚠️ ${exclusionReason} — 주의 종목`);
+
   return {
     code: item.code,
     name: item.name,
@@ -159,13 +166,14 @@ async function evaluateCandidate(
     tradingValueLabel: formatEok(item.tradingValue),
     trend: closes.slice(-20),
     score: { trend: trend.score, volume: volume.score, marketMood: mood.score, total },
-    reasons: [...trend.reasons, ...volume.reasons, ...mood.reasons],
+    reasons,
+    caution: exclusionReason ?? undefined,
   };
 }
 
 async function buildCospickSnapshot(): Promise<CospickSnapshot> {
   const [universe, kospiAbove, kosdaqAbove] = await Promise.all([
-    getVolumeRankUniverse(20),
+    getVolumeRankUniverse(30),
     getIndexAboveMa20("0001"),
     getIndexAboveMa20("1001"),
   ]);
@@ -183,10 +191,10 @@ async function buildCospickSnapshot(): Promise<CospickSnapshot> {
     }),
   );
 
-  const candidates = evaluated
-    .filter((c): c is CospickCandidate => c !== null)
-    .sort((a, b) => b.score.total - a.score.total)
-    .slice(0, 3);
+  const results = evaluated.filter((c): c is CospickCandidate => c !== null);
+  const clean = results.filter((c) => !c.caution).sort((a, b) => b.score.total - a.score.total);
+  const risky = results.filter((c) => c.caution).sort((a, b) => b.score.total - a.score.total);
+  const candidates = [...clean, ...risky].slice(0, 3);
 
   return {
     candidates,
@@ -230,7 +238,7 @@ export async function refreshCospickSnapshot(): Promise<CospickSnapshot> {
   return snapshot;
 }
 
-// ── 다음날 09:10 매도 체크 (전날 15시 스캔가를 매수가로 가정) ──────────
+// ── 다음날 09:10 매도 체크 (전날 14시 30분 스캔가를 매수가로 가정) ──────────
 export type ExitCheckItem = {
   code: string;
   name: string;
@@ -240,7 +248,7 @@ export type ExitCheckItem = {
   action: string;
 };
 
-function classifyExit(pct: number): string {
+export function classifyExit(pct: number): string {
   if (pct >= 3) return "🟢 전량 익절";
   if (pct >= -1.5) return "🟡 09:10 전량 매도";
   if (pct >= -3) return "🟠 원칙적으로 손절";

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CATEGORIES, CATEGORY_ICONS, Category, INVESTMENT_TAB, Trend } from "@/data/trends";
 import type { DailyAnalysis } from "@/lib/dailyAnalysis";
 import type { CospickSnapshot, ExitCheckItem } from "@/lib/cospick";
+import type { OverseasCospickSnapshot } from "@/lib/cospickOverseas";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
 import TrendClusterCard from "./TrendClusterCard";
@@ -21,12 +22,14 @@ export default function HomeClient({
   analysis,
   cospick,
   exitCheck,
+  overseasCospick,
   isAdmin,
 }: {
   trends: Trend[];
   analysis: DailyAnalysis | null;
   cospick: CospickSnapshot | null;
   exitCheck: ExitCheckItem[];
+  overseasCospick: OverseasCospickSnapshot | null;
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -117,7 +120,7 @@ export default function HomeClient({
       </div>
 
       {isAdmin && activeCategory === INVESTMENT_TAB.label && (
-        <InvestmentTab cospick={cospick} exitCheck={exitCheck} />
+        <InvestmentTab cospick={cospick} exitCheck={exitCheck} overseasCospick={overseasCospick} />
       )}
 
       {activeCategory === "전체" && analysis && analysis.topTrends.length > 0 && (
