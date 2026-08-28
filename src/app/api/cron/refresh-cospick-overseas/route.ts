@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     console.error("Failed to refresh overseas cospick snapshot:", error);
-    await sendNtfy("해외 코스픽 07:00 스캔 실패", message);
+    await sendNtfy("해외 코스픽 22:00 스캔 실패", message);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 
