@@ -266,7 +266,8 @@ async function getCospickHistoryRaw(): Promise<CospickHistoryEntry[]> {
 }
 
 // 같은 날짜에 여러 번 실행돼도(재배포 등) 그날 기록은 마지막 결과로 덮어쓴다.
-async function appendCospickHistory(snapshot: CospickSnapshot) {
+// 배포 직후 1회성 백필 스크립트에서도 재사용할 수 있도록 export.
+export async function appendCospickHistory(snapshot: CospickSnapshot) {
   const existing = await getCospickHistoryRaw();
   const date = toKstDateKey(snapshot.generatedAt);
   const entry: CospickHistoryEntry = {
