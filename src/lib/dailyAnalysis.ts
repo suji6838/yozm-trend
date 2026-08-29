@@ -358,10 +358,21 @@ export async function getDailyAnalysis(): Promise<DailyAnalysis | null> {
   }
 }
 
+// cron은 매일 호출되지만(달력 날짜 기반 "3일마다"는 월경계에서 간격이 틀어짐),
+// 마지막 성공 생성 후 이만큼 안 지났으면 재생성하지 않고 그대로 둔다 —
+// 실제 갱신 주기는 이 값으로만 결정된다.
+const REFRESH_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000;
+
 // cron 전용 — 실제로 네이버+Gemini를 호출해 새로 분석하고 Blob에 저장한다.
 // Gemini 호출이 실패(할당량 소진 등)해도, 기존에 저장돼 있던 마지막 성공 결과를
 // 그대로 유지(덮어쓰지 않음)하고 그 값을 반환한다.
 export async function refreshDailyAnalysis(): Promise<DailyAnalysis> {
+  const existing = await getDailyAnalysis();
+  if (existing) {
+    const age = Date.now() - new Date(existing.generatedAt).getTime();
+    if (age < REFRESH_INTERVAL_MS) return existing;
+  }
+
   const [pool, momentum] = await Promise.all([
     getCandidatePool(6),
     getMomentumSeries(),
