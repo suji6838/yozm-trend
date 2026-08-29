@@ -1,13 +1,86 @@
 "use client";
 
-import type { CospickSnapshot, CospickCandidate, ExitCheckItem } from "@/lib/cospick";
+import type {
+  CospickSnapshot,
+  CospickCandidate,
+  ExitCheckItem,
+  CospickHistoryEntry,
+} from "@/lib/cospick";
 import { COSPICK_SCORE_MAX } from "@/lib/cospick";
 import type {
   OverseasCospickSnapshot,
   OverseasCandidate,
   OverseasExitItem,
+  OverseasCospickHistoryEntry,
 } from "@/lib/cospickOverseas";
 import { OVERSEAS_SCORE_MAX } from "@/lib/cospickOverseas";
+
+function formatHistoryDate(dateKey: string) {
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return `${m}.${d} (${days[date.getDay()]})`;
+}
+
+function CospickHistoryCard({ entry }: { entry: CospickHistoryEntry }) {
+  return (
+    <div className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm">
+      <p className="text-xs font-semibold text-zinc-500">{formatHistoryDate(entry.date)}</p>
+      {entry.candidates.length === 0 ? (
+        <p className="mt-2 text-xs text-zinc-300">추천 종목 없음</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {entry.candidates.map((c) => {
+            const rising = c.changePct >= 0;
+            return (
+              <span
+                key={c.code}
+                className="rounded-full bg-zinc-50 px-3 py-1 text-xs text-zinc-700"
+              >
+                {c.name} · {c.price.toLocaleString("ko-KR")}원 ·{" "}
+                <span className={rising ? "text-red-600" : "text-blue-600"}>
+                  {rising ? "+" : ""}
+                  {c.changePct}%
+                </span>{" "}
+                · {c.score}점
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OverseasCospickHistoryCard({ entry }: { entry: OverseasCospickHistoryEntry }) {
+  return (
+    <div className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm">
+      <p className="text-xs font-semibold text-zinc-500">{formatHistoryDate(entry.date)}</p>
+      {entry.candidates.length === 0 ? (
+        <p className="mt-2 text-xs text-zinc-300">추천 종목 없음</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {entry.candidates.map((c) => {
+            const rising = c.changePct >= 0;
+            return (
+              <span
+                key={c.symbol}
+                className="rounded-full bg-zinc-50 px-3 py-1 text-xs text-zinc-700"
+              >
+                {c.symbol} · ${c.price.toFixed(2)} ·{" "}
+                <span className={rising ? "text-red-600" : "text-blue-600"}>
+                  {rising ? "+" : ""}
+                  {c.changePct}%
+                </span>{" "}
+                · {c.score}점
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Sparkline({ values }: { values: number[] }) {
   const min = Math.min(...values);
@@ -184,10 +257,14 @@ export default function InvestmentTab({
   cospick,
   exitCheck,
   overseasCospick,
+  cospickHistory,
+  overseasCospickHistory,
 }: {
   cospick: CospickSnapshot | null;
   exitCheck: ExitCheckItem[];
   overseasCospick: OverseasCospickSnapshot | null;
+  cospickHistory: CospickHistoryEntry[];
+  overseasCospickHistory: OverseasCospickHistoryEntry[];
 }) {
   if (!cospick) {
     return (
@@ -328,6 +405,36 @@ export default function InvestmentTab({
               </div>
             )}
           </>
+        )}
+      </div>
+
+      <div className="mt-10">
+        <p className="text-sm font-semibold text-zinc-700">📒 최근 1주일 매수 추천 기록 (국내)</p>
+        {cospickHistory.length === 0 ? (
+          <div className="mt-2 rounded-2xl border border-zinc-100 bg-white p-6 text-center text-xs text-zinc-400 shadow-sm">
+            아직 쌓인 기록이 없습니다.
+          </div>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {cospickHistory.map((entry) => (
+              <CospickHistoryCard key={entry.date} entry={entry} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6">
+        <p className="text-sm font-semibold text-zinc-700">📒 최근 1주일 매수 추천 기록 (해외)</p>
+        {overseasCospickHistory.length === 0 ? (
+          <div className="mt-2 rounded-2xl border border-zinc-100 bg-white p-6 text-center text-xs text-zinc-400 shadow-sm">
+            아직 쌓인 기록이 없습니다.
+          </div>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {overseasCospickHistory.map((entry) => (
+              <OverseasCospickHistoryCard key={entry.date} entry={entry} />
+            ))}
+          </div>
         )}
       </div>
     </div>

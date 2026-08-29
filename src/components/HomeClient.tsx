@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CATEGORIES, CATEGORY_ICONS, Category, INVESTMENT_TAB, Trend } from "@/data/trends";
 import type { DailyAnalysis } from "@/lib/dailyAnalysis";
-import type { CospickSnapshot, ExitCheckItem } from "@/lib/cospick";
-import type { OverseasCospickSnapshot } from "@/lib/cospickOverseas";
+import type { CospickSnapshot, ExitCheckItem, CospickHistoryEntry } from "@/lib/cospick";
+import type { OverseasCospickSnapshot, OverseasCospickHistoryEntry } from "@/lib/cospickOverseas";
 import { useSavedTrends } from "@/hooks/useSavedTrends";
 import TrendCard from "./TrendCard";
 import TrendClusterCard from "./TrendClusterCard";
@@ -23,6 +23,8 @@ export default function HomeClient({
   cospick,
   exitCheck,
   overseasCospick,
+  cospickHistory,
+  overseasCospickHistory,
   isAdmin,
 }: {
   trends: Trend[];
@@ -30,6 +32,8 @@ export default function HomeClient({
   cospick: CospickSnapshot | null;
   exitCheck: ExitCheckItem[];
   overseasCospick: OverseasCospickSnapshot | null;
+  cospickHistory: CospickHistoryEntry[];
+  overseasCospickHistory: OverseasCospickHistoryEntry[];
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -120,7 +124,13 @@ export default function HomeClient({
       </div>
 
       {isAdmin && activeCategory === INVESTMENT_TAB.label && (
-        <InvestmentTab cospick={cospick} exitCheck={exitCheck} overseasCospick={overseasCospick} />
+        <InvestmentTab
+          cospick={cospick}
+          exitCheck={exitCheck}
+          overseasCospick={overseasCospick}
+          cospickHistory={cospickHistory}
+          overseasCospickHistory={overseasCospickHistory}
+        />
       )}
 
       {activeCategory === "전체" && analysis && analysis.topTrends.length > 0 && (

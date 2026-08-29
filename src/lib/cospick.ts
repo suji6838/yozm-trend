@@ -235,7 +235,65 @@ export async function getCospickSnapshot(): Promise<CospickSnapshot | null> {
 export async function refreshCospickSnapshot(): Promise<CospickSnapshot> {
   const snapshot = await buildCospickSnapshot();
   await saveSnapshot(snapshot);
+  await appendCospickHistory(snapshot);
   return snapshot;
+}
+
+// ── 1주일 기록용 히스토리 (14시 30분 스캔 결과를 날짜별로 최대 7일 보관) ──────
+export type CospickHistoryEntry = {
+  date: string; // YYYY-MM-DD (한국시간 기준)
+  generatedAt: string;
+  candidates: { code: string; name: string; price: number; changePct: number; score: number }[];
+};
+
+const HISTORY_PATHNAME = "cospick-history.json";
+const HISTORY_DAYS = 7;
+
+function toKstDateKey(iso: string) {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date(iso));
+}
+
+async function getCospickHistoryRaw(): Promise<CospickHistoryEntry[]> {
+  try {
+    const result = await get(HISTORY_PATHNAME, { access: "private" });
+    if (!result || result.statusCode !== 200) return [];
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as CospickHistoryEntry[];
+  } catch (error) {
+    console.error("Failed to load cospick history:", error);
+    return [];
+  }
+}
+
+// 같은 날짜에 여러 번 실행돼도(재배포 등) 그날 기록은 마지막 결과로 덮어쓴다.
+async function appendCospickHistory(snapshot: CospickSnapshot) {
+  const existing = await getCospickHistoryRaw();
+  const date = toKstDateKey(snapshot.generatedAt);
+  const entry: CospickHistoryEntry = {
+    date,
+    generatedAt: snapshot.generatedAt,
+    candidates: snapshot.candidates.map((c) => ({
+      code: c.code,
+      name: c.name,
+      price: c.price,
+      changePct: c.changePct,
+      score: c.score.total,
+    })),
+  };
+  const updated = [...existing.filter((e) => e.date !== date), entry]
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, HISTORY_DAYS);
+  await put(HISTORY_PATHNAME, JSON.stringify(updated), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
+
+// 방문자용 — Blob만 읽는다.
+export async function getCospickHistory(): Promise<CospickHistoryEntry[]> {
+  return getCospickHistoryRaw();
 }
 
 // ── 다음날 09:10 매도 체크 (전날 14시 30분 스캔가를 매수가로 가정) ──────────

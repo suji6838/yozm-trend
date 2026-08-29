@@ -4,8 +4,20 @@ import Footer from "@/components/Footer";
 import HomeClient from "@/components/HomeClient";
 import { TRENDS } from "@/data/trends";
 import { getDailyAnalysis, DailyAnalysis } from "@/lib/dailyAnalysis";
-import { getCospickSnapshot, CospickSnapshot, getExitCheck, ExitCheckItem } from "@/lib/cospick";
-import { getOverseasCospickSnapshot, OverseasCospickSnapshot } from "@/lib/cospickOverseas";
+import {
+  getCospickSnapshot,
+  CospickSnapshot,
+  getExitCheck,
+  ExitCheckItem,
+  getCospickHistory,
+  CospickHistoryEntry,
+} from "@/lib/cospick";
+import {
+  getOverseasCospickSnapshot,
+  OverseasCospickSnapshot,
+  getOverseasCospickHistory,
+  OverseasCospickHistoryEntry,
+} from "@/lib/cospickOverseas";
 import { getAdminUser } from "@/lib/adminAuth";
 
 // getDailyAnalysis/getCospickSnapshot/getExitCheck는 각자 cron이 미리 채워둔
@@ -35,6 +47,8 @@ export default async function Home() {
   let cospick: CospickSnapshot | null = null;
   let exitCheck: ExitCheckItem[] = [];
   let overseasCospick: OverseasCospickSnapshot | null = null;
+  let cospickHistory: CospickHistoryEntry[] = [];
+  let overseasCospickHistory: OverseasCospickHistoryEntry[] = [];
   if (isAdmin) {
     try {
       cospick = await getCospickSnapshot();
@@ -53,6 +67,18 @@ export default async function Home() {
     } catch (error) {
       console.error("Failed to build overseas cospick snapshot:", error);
     }
+
+    try {
+      cospickHistory = await getCospickHistory();
+    } catch (error) {
+      console.error("Failed to load cospick history:", error);
+    }
+
+    try {
+      overseasCospickHistory = await getOverseasCospickHistory();
+    } catch (error) {
+      console.error("Failed to load overseas cospick history:", error);
+    }
   }
 
   const trends = analysis && analysis.trends.length > 0 ? analysis.trends : TRENDS;
@@ -67,6 +93,8 @@ export default async function Home() {
           cospick={cospick}
           exitCheck={exitCheck}
           overseasCospick={overseasCospick}
+          cospickHistory={cospickHistory}
+          overseasCospickHistory={overseasCospickHistory}
           isAdmin={isAdmin}
         />
       </Suspense>

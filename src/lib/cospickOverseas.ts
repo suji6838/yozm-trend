@@ -169,5 +169,71 @@ export async function getOverseasCospickSnapshot(): Promise<OverseasCospickSnaps
 export async function refreshOverseasCospickSnapshot(): Promise<OverseasCospickSnapshot> {
   const snapshot = await buildOverseasSnapshot();
   await saveOverseasSnapshot(snapshot);
+  await appendOverseasCospickHistory(snapshot);
   return snapshot;
+}
+
+// ── 1주일 기록용 히스토리 (전일 종가 스캔 결과를 날짜별로 최대 7일 보관) ──────
+export type OverseasCospickHistoryEntry = {
+  date: string; // YYYY-MM-DD (한국시간 기준)
+  generatedAt: string;
+  candidates: {
+    symbol: string;
+    exchange: string;
+    name: string;
+    price: number;
+    changePct: number;
+    score: number;
+  }[];
+};
+
+const OVERSEAS_HISTORY_PATHNAME = "cospick-overseas-history.json";
+const OVERSEAS_HISTORY_DAYS = 7;
+
+function toKstDateKey(iso: string) {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date(iso));
+}
+
+async function getOverseasCospickHistoryRaw(): Promise<OverseasCospickHistoryEntry[]> {
+  try {
+    const result = await get(OVERSEAS_HISTORY_PATHNAME, { access: "private" });
+    if (!result || result.statusCode !== 200) return [];
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as OverseasCospickHistoryEntry[];
+  } catch (error) {
+    console.error("Failed to load overseas cospick history:", error);
+    return [];
+  }
+}
+
+// 같은 날짜에 여러 번 실행돼도(재배포 등) 그날 기록은 마지막 결과로 덮어쓴다.
+async function appendOverseasCospickHistory(snapshot: OverseasCospickSnapshot) {
+  const existing = await getOverseasCospickHistoryRaw();
+  const date = toKstDateKey(snapshot.generatedAt);
+  const entry: OverseasCospickHistoryEntry = {
+    date,
+    generatedAt: snapshot.generatedAt,
+    candidates: snapshot.candidates.map((c) => ({
+      symbol: c.symbol,
+      exchange: c.exchange,
+      name: c.name,
+      price: c.price,
+      changePct: c.changePct,
+      score: c.score.total,
+    })),
+  };
+  const updated = [...existing.filter((e) => e.date !== date), entry]
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, OVERSEAS_HISTORY_DAYS);
+  await put(OVERSEAS_HISTORY_PATHNAME, JSON.stringify(updated), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
+
+// 방문자용 — Blob만 읽는다.
+export async function getOverseasCospickHistory(): Promise<OverseasCospickHistoryEntry[]> {
+  return getOverseasCospickHistoryRaw();
 }
