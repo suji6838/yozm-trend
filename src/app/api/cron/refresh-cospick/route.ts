@@ -18,12 +18,12 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     console.error("Failed to refresh cospick snapshot:", error);
-    await sendNtfy("코스픽 14:30 매수 추천 실패", message);
+    await sendNtfy("코스픽 14:00 매수 추천 실패", message);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 
   if (snapshot.candidates.length === 0) {
-    await sendNtfy("코스픽 14:30 매수 추천", "조건 충족 종목 없음 — 현금 보유");
+    await sendNtfy("코스픽 14:00 매수 추천", "조건 충족 종목 없음 — 현금 보유");
   } else {
     const lines = snapshot.candidates.map(
       (c) =>
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
           c.changePct >= 0 ? "+" : ""
         }${c.changePct}%) 점수 ${c.score.total}/${COSPICK_SCORE_MAX}`,
     );
-    await sendNtfy("코스픽 14:30 매수 추천", lines.join("\n"));
+    await sendNtfy("코스픽 14:00 매수 추천", lines.join("\n"));
   }
 
   return NextResponse.json({
