@@ -75,6 +75,80 @@ function buildCandidateList(pool: Record<Category, Trend[]>): Candidate[] {
   return list;
 }
 
+// ── 3일 주기 반복 방지: 직전 몇 사이클에 이미 1위권으로 뽑힌 주제를 기록해두고,
+// 다음 채점 때 Gemini에게 "새 전개가 없으면 다른 후보를 골라라"라고 지시한다.
+// (프롬프트 지시만으로는 못 미더우므로 selectTopTrends에서 제목이 그대로 겹치면
+// 코드에서도 한 번 더 걸러낸다.)
+
+export type TopicHistoryEntry = {
+  generatedAt: string;
+  topics: { category: Category; title: string; oneLineSummary: string }[];
+};
+
+const HISTORY_PATHNAME = "daily-analysis-history.json";
+const HISTORY_KEEP_CYCLES = 4;
+
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[\s.,'"“”‘’!?…·\-()[\]]/g, "");
+}
+
+async function getTopicHistory(): Promise<TopicHistoryEntry[]> {
+  try {
+    const result = await get(HISTORY_PATHNAME, { access: "private" });
+    if (!result || result.statusCode !== 200) return [];
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as TopicHistoryEntry[];
+  } catch {
+    return [];
+  }
+}
+
+async function appendTopicHistory(
+  history: TopicHistoryEntry[],
+  entry: TopicHistoryEntry,
+) {
+  const next = [...history, entry].slice(-HISTORY_KEEP_CYCLES);
+  await put(HISTORY_PATHNAME, JSON.stringify(next), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
+
+function buildHistoryBlock(history: TopicHistoryEntry[]): string {
+  if (history.length === 0) return "(이전 기록 없음)";
+  return history
+    .map((entry) => {
+      const date = entry.generatedAt.slice(0, 10);
+      const lines = entry.topics
+        .map((t) => `- (${t.category}) ${t.title}: ${t.oneLineSummary}`)
+        .join("\n");
+      return `[${date}]\n${lines}`;
+    })
+    .join("\n\n");
+}
+
+function recentTitlesByCategory(
+  history: TopicHistoryEntry[],
+): Record<Category, Set<string>> {
+  const result: Record<Category, Set<string>> = {
+    "AI/테크": new Set(),
+    "금융": new Set(),
+    "건강/뷰티": new Set(),
+    "소비/라이프": new Set(),
+    "마케팅/비즈니스": new Set(),
+  };
+  for (const entry of history) {
+    for (const t of entry.topics) {
+      result[t.category].add(normalizeTitle(t.title));
+    }
+  }
+  return result;
+}
+
 function buildCriteriaBlock() {
   return CATEGORIES.map((category) => {
     const c = CATEGORY_CRITERIA[category];
@@ -196,6 +270,7 @@ function scoreBadge(score: number): string {
 function selectTopTrends(
   raw: RawTrendCluster[],
   candidates: Candidate[],
+  recentTitles: Record<Category, Set<string>>,
 ): TrendCluster[] {
   const passing = raw
     .filter(
@@ -206,11 +281,17 @@ function selectTopTrends(
     )
     .sort((a, b) => b.score - a.score);
 
+  // 직전 사이클들에서 이미 그대로 1위권으로 나갔던 제목은 1차 선정에서 제외한다
+  // — Gemini가 프롬프트 지시(새 전개 없으면 다른 후보 선택)를 안 지켰을 때의 안전망.
+  const isRepeat = (t: RawTrendCluster) =>
+    recentTitles[t.category as Category]?.has(normalizeTitle(t.title));
+
   const perCategoryCount: Partial<Record<Category, number>> = {};
   const selected: RawTrendCluster[] = [];
 
   for (const t of passing) {
     if (selected.length >= 5) break;
+    if (isRepeat(t)) continue;
     const category = t.category as Category;
     const count = perCategoryCount[category] ?? 0;
     if (count < 2) {
@@ -219,6 +300,8 @@ function selectTopTrends(
     }
   }
 
+  // 반복 제외 때문에 너무 적게 뽑혔으면, 반복이든 카테고리 쏠림이든 일단 채운다
+  // (아예 안 보여주는 것보다는 낫다).
   if (selected.length < 3) {
     for (const t of passing) {
       if (selected.length >= 5) break;
@@ -257,6 +340,7 @@ async function runCombinedGemini(
   pool: Record<Category, Trend[]>,
   candidates: Candidate[],
   momentum: Record<Category, MomentumSeries[]>,
+  history: TopicHistoryEntry[],
 ): Promise<CombinedResult> {
   const prompt = `너는 데일리 트렌드 뉴스레터 에디터야. 아래 두 가지 작업을 한 번에 해줘 — ①은 카테고리별 기사 목록용, ②는 "오늘의 트렌드" 분석용이고 서로 별개의 결과물이야.
 
@@ -302,6 +386,11 @@ OpenAI Agent 발표 + Google Agent 확대 + Microsoft Agent 플랫폼 + Anthropi
 [카테고리별 데이터랩 모멘텀 참고자료 (최근 7일 검색 비율, 100에 가까울수록 그 기간 내 최고치)]
 ${buildMomentumBlock(momentum)}
 
+[최근 사이클에서 이미 "오늘의 트렌드"로 다뤘던 주제 (날짜순)]
+${buildHistoryBlock(history)}
+
+위 목록과 같은 주제가 이번에도 여전히 가장 중요한 흐름이라면, 그 사이에 실제로 일어난 새로운 전개(수치 변화, 새 사건, 다음 단계 등)를 반영해서 title/oneLineSummary/whyNow/whyItMatters를 갱신해줘 — 제목과 요약을 이전과 거의 동일하게 반복하지 마. 그 사이 눈에 띄는 새 전개가 없다면 그 주제는 후순위로 두고, 대신 다른 후보를 우선해줘.
+
 최대 8개까지 트렌드 후보를 골라서 각각 title(20~35자, 변화 방향 서술), oneLineSummary(변화를 한 문장으로), whyNow(왜 지금 나타난 트렌드인지 2문장), whyItMatters(시장/기업/소비자에게 어떤 의미인지 2~3문장), score(0~100), momentum(상승/유지/하락 중 하나), category(5개 카테고리 중 정확히 하나), evidenceIndices(이 트렌드를 뒷받침하는 후보 기사 번호 2~4개)를 trends에 JSON으로 반환해줘.
 
 ## ①·② 공통 후보 기사 목록 (번호) (카테고리) 제목 - 요약 - 출처
@@ -319,7 +408,11 @@ ${buildCandidateBlock(candidates)}
 
   return {
     trends: pickWithBackfill(parsed.selectedIndices ?? [], pool, candidates),
-    topTrends: selectTopTrends(parsed.trends ?? [], candidates),
+    topTrends: selectTopTrends(
+      parsed.trends ?? [],
+      candidates,
+      recentTitlesByCategory(history),
+    ),
   };
 }
 
@@ -373,20 +466,31 @@ export async function refreshDailyAnalysis(): Promise<DailyAnalysis> {
     if (age < REFRESH_INTERVAL_MS) return existing;
   }
 
-  const [pool, momentum] = await Promise.all([
+  const [pool, momentum, history] = await Promise.all([
     getCandidatePool(6),
     getMomentumSeries(),
+    getTopicHistory(),
   ]);
   const candidates = buildCandidateList(pool);
 
   try {
-    const combined = await runCombinedGemini(pool, candidates, momentum);
+    const combined = await runCombinedGemini(pool, candidates, momentum, history);
     const analysis: DailyAnalysis = {
       trends: combined.trends,
       topTrends: combined.topTrends,
       generatedAt: new Date().toISOString(),
     };
     await saveAnalysis(analysis);
+    if (combined.topTrends.length > 0) {
+      await appendTopicHistory(history, {
+        generatedAt: analysis.generatedAt,
+        topics: combined.topTrends.map((t) => ({
+          category: t.category,
+          title: t.title,
+          oneLineSummary: t.oneLineSummary,
+        })),
+      });
+    }
     return analysis;
   } catch (error) {
     console.error(
