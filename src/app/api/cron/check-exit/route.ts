@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { refreshExitCheck } from "@/lib/cospick";
 import { sendNtfy } from "@/lib/ntfy";
+import { kstHHmm } from "@/lib/time";
 
 export const maxDuration = 30;
 
@@ -10,18 +11,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const title = `코스픽 ${kstHHmm()} 매도 체크`;
+
   let items;
   try {
     items = await refreshExitCheck();
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     console.error("Failed to refresh exit check:", error);
-    await sendNtfy("코스픽 09:10 매도 체크 실패", message);
+    await sendNtfy(`${title} 실패`, message);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 
   if (items.length === 0) {
-    await sendNtfy("코스픽 09:10 매도 체크", "어제 추천된 종목이 없습니다.");
+    await sendNtfy(title, "최근 추천된 종목이 없습니다.");
   } else {
     const lines = items.map(
       (i) =>
@@ -29,7 +32,7 @@ export async function GET(req: NextRequest) {
           "ko-KR",
         )} (${i.changePct >= 0 ? "+" : ""}${i.changePct}%) ${i.action}`,
     );
-    await sendNtfy("코스픽 09:10 매도 체크", lines.join("\n"));
+    await sendNtfy(title, lines.join("\n"));
   }
 
   return NextResponse.json({ ok: true, items });
