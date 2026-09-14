@@ -232,7 +232,7 @@ export async function getCospickSnapshot(): Promise<CospickSnapshot | null> {
 
 // cron 전용 — 실제로 KIS를 호출해 새로 스캔하고 Blob에 저장한다.
 // 실패 시 기존에 저장돼 있던 마지막 성공 스냅샷을 그대로 유지(덮어쓰지 않음).
-export async function refreshCospickSnapshot(): Promise<CospickSnapshot> {
+async function refreshCospickSnapshot(): Promise<CospickSnapshot> {
   const snapshot = await buildCospickSnapshot();
   await saveSnapshot(snapshot);
   await appendCospickHistory(snapshot);
@@ -357,9 +357,25 @@ export async function getExitCheck(): Promise<ExitCheckItem[]> {
 }
 
 // cron 전용 — 저장된 코스픽 스냅샷 기준으로 현재가를 새로 조회해 Blob에 저장한다.
-export async function refreshExitCheck(): Promise<ExitCheckItem[]> {
-  const snapshot = await getCospickSnapshot();
-  const items = snapshot ? await buildExitCheck(snapshot) : [];
+async function refreshExitCheck(prevSnapshot: CospickSnapshot | null): Promise<ExitCheckItem[]> {
+  const items = prevSnapshot ? await buildExitCheck(prevSnapshot) : [];
   await saveExitCheck(items);
   return items;
+}
+
+// cron 전용 — 해외판(cospickOverseas.ts)과 동일하게, 매도체크와 매수스캔을 한 요청
+// 안에서 순서대로 처리한다. 이전 스냅샷을 먼저 읽어 매도체크를 끝낸 뒤에 새 스냅샷으로
+// 덮어써서, 두 크론을 따로 스케줄링해 실행 순서를 맞추던 방식(타이밍 의존, 누락 위험)을
+// 없앤다. 매수/매도는 서로 다른 기준(매수=오늘 스캔한 새 후보, 매도=직전 추천 종목의
+// 현재가)으로 계산되므로 같은 종목일 필요가 없다.
+export type CospickRefreshResult = {
+  snapshot: CospickSnapshot;
+  exitItems: ExitCheckItem[];
+};
+
+export async function refreshCospickAndExitCheck(): Promise<CospickRefreshResult> {
+  const prevSnapshot = await getCospickSnapshot();
+  const exitItems = await refreshExitCheck(prevSnapshot);
+  const snapshot = await refreshCospickSnapshot();
+  return { snapshot, exitItems };
 }

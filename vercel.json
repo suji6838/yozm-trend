@@ -5,16 +5,8 @@
       "schedule": "0 21 * * *"
     },
     {
-      "path": "/api/cron/check-exit",
-      "schedule": "8 0 * * 1-5"
-    },
-    {
       "path": "/api/cron/refresh-cospick",
       "schedule": "10 0 * * 1-5"
-    },
-    {
-      "path": "/api/cron/check-exit",
-      "schedule": "58 4 * * 1-5"
     },
     {
       "path": "/api/cron/refresh-cospick",
