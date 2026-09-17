@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   } else {
     const lines = snapshot.candidates.map(
       (c) =>
-        `${c.name} ${c.price.toLocaleString("ko-KR")}원 (${
+        `[${c.market}] ${c.name} ${c.price.toLocaleString("ko-KR")}원 (${
           c.changePct >= 0 ? "+" : ""
         }${c.changePct}%) 점수 ${c.score.total}/${COSPICK_SCORE_MAX}`,
     );

@@ -122,7 +122,9 @@ function CandidateCard({ candidate, rank }: { candidate: CospickCandidate; rank:
       )}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs text-zinc-400">{candidate.code}</p>
+          <p className="text-xs text-zinc-400">
+            {candidate.market} · {candidate.code}
+          </p>
           <p className="mt-0.5 text-base font-semibold text-zinc-900">{candidate.name}</p>
         </div>
         <div className="flex flex-col items-end">
@@ -314,11 +316,20 @@ export default function InvestmentTab({
           오늘은 조건을 만족하는 매수 후보가 없습니다. 현금 보유를 권장합니다.
         </div>
       ) : (
-        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {candidates.map((candidate, i) => (
-            <CandidateCard key={candidate.code} candidate={candidate} rank={i + 1} />
-          ))}
-        </div>
+        (["코스피", "코스닥"] as const).map((market) => {
+          const group = candidates.filter((c) => c.market === market);
+          if (group.length === 0) return null;
+          return (
+            <div key={market} className="mt-3">
+              <p className="text-xs font-semibold text-zinc-500">{market}</p>
+              <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {group.map((candidate, i) => (
+                  <CandidateCard key={candidate.code} candidate={candidate} rank={i + 1} />
+                ))}
+              </div>
+            </div>
+          );
+        })
       )}
 
       <div className="mt-6 rounded-2xl border border-zinc-100 bg-white p-5 text-xs text-zinc-500 shadow-sm">

@@ -178,15 +178,16 @@ export type KisVolumeRankItem = {
   tradingValue: number; // 당일 누적 거래대금(원)
 };
 
-// 코스피+코스닥 통합, 거래대금순 상위 종목 (관리종목/거래정지/ETF/ETN/SPAC 등 제외)
-export async function getVolumeRankUniverse(limit = 20) {
+// 거래대금순 상위 종목 (관리종목/거래정지/ETF/ETN/SPAC 등 제외)
+// market: "0000"=코스피+코스닥 통합, "0001"=코스피만, "1001"=코스닥만
+export async function getVolumeRankUniverse(limit = 20, market: "0000" | "0001" | "1001" = "0000") {
   const data = (await kisFetch(
     "/uapi/domestic-stock/v1/quotations/volume-rank",
     "FHPST01710000",
     {
       FID_COND_MRKT_DIV_CODE: "J",
       FID_COND_SCR_DIV_CODE: "20171",
-      FID_INPUT_ISCD: "0000",
+      FID_INPUT_ISCD: market,
       FID_DIV_CLS_CODE: "1",
       FID_BLNG_CLS_CODE: "3",
       FID_TRGT_CLS_CODE: "111111111",

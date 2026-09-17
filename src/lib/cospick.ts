@@ -121,6 +121,7 @@ function formatEok(won: number) {
 export type CospickCandidate = {
   code: string;
   name: string;
+  market: "코스피" | "코스닥";
   price: number;
   changePct: number;
   tradingValueLabel: string;
@@ -142,6 +143,7 @@ export type CospickSnapshot = {
 // 변동성 큰 날 거래대금 상위 종목이 전부 제외돼 매수 후보가 0개로 나오던 문제의 수정.
 async function evaluateCandidate(
   item: KisVolumeRankItem,
+  market: "코스피" | "코스닥",
   mood: ReturnType<typeof scoreMarketMood>,
 ): Promise<CospickCandidate | null> {
   const chart = await getDailyChart(item.code, 90);
@@ -161,6 +163,7 @@ async function evaluateCandidate(
   return {
     code: item.code,
     name: item.name,
+    market,
     price: item.price,
     changePct: item.changePct,
     tradingValueLabel: formatEok(item.tradingValue),
@@ -171,19 +174,16 @@ async function evaluateCandidate(
   };
 }
 
-async function buildCospickSnapshot(): Promise<CospickSnapshot> {
-  const [universe, kospiAbove, kosdaqAbove] = await Promise.all([
-    getVolumeRankUniverse(30),
-    getIndexAboveMa20("0001"),
-    getIndexAboveMa20("1001"),
-  ]);
-
-  const mood = scoreMarketMood(kospiAbove, kosdaqAbove);
-
+// 시장별로 거래대금 상위 종목을 스크리닝해 상위 3개(부족하면 주의 종목으로 보충)를 뽑는다.
+async function pickMarketCandidates(
+  universe: KisVolumeRankItem[],
+  market: "코스피" | "코스닥",
+  mood: ReturnType<typeof scoreMarketMood>,
+): Promise<CospickCandidate[]> {
   const evaluated = await Promise.all(
     universe.map(async (item) => {
       try {
-        return await evaluateCandidate(item, mood);
+        return await evaluateCandidate(item, market, mood);
       } catch (error) {
         console.error(`cospick scoring failed for ${item.code}:`, error);
         return null;
@@ -194,11 +194,29 @@ async function buildCospickSnapshot(): Promise<CospickSnapshot> {
   const results = evaluated.filter((c): c is CospickCandidate => c !== null);
   const clean = results.filter((c) => !c.caution).sort((a, b) => b.score.total - a.score.total);
   const risky = results.filter((c) => c.caution).sort((a, b) => b.score.total - a.score.total);
-  const candidates = [...clean, ...risky].slice(0, 3);
+  return [...clean, ...risky].slice(0, 3);
+}
+
+// 코스피/코스닥을 각각 스캔해 3개씩(총 최대 6개) 후보를 뽑는다 — 통합 순위로 뽑으면
+// 거래대금이 큰 코스피가 코스닥 종목을 밀어내던 문제의 수정.
+async function buildCospickSnapshot(): Promise<CospickSnapshot> {
+  const [kospiUniverse, kosdaqUniverse, kospiAbove, kosdaqAbove] = await Promise.all([
+    getVolumeRankUniverse(15, "0001"),
+    getVolumeRankUniverse(15, "1001"),
+    getIndexAboveMa20("0001"),
+    getIndexAboveMa20("1001"),
+  ]);
+
+  const mood = scoreMarketMood(kospiAbove, kosdaqAbove);
+
+  const [kospiPicks, kosdaqPicks] = await Promise.all([
+    pickMarketCandidates(kospiUniverse, "코스피", mood),
+    pickMarketCandidates(kosdaqUniverse, "코스닥", mood),
+  ]);
 
   return {
-    candidates,
-    scanned: universe.length,
+    candidates: [...kospiPicks, ...kosdaqPicks],
+    scanned: kospiUniverse.length + kosdaqUniverse.length,
     marketMood: { kospiAboveMa20: kospiAbove, kosdaqAboveMa20: kosdaqAbove },
     generatedAt: new Date().toISOString(),
   };
