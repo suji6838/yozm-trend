@@ -9,12 +9,24 @@
       "schedule": "10 0 * * 1-5"
     },
     {
+      "path": "/api/cron/refresh-cospick?backup=1",
+      "schedule": "10 1 * * 1-5"
+    },
+    {
       "path": "/api/cron/refresh-cospick",
       "schedule": "0 5 * * 1-5"
     },
     {
+      "path": "/api/cron/refresh-cospick?backup=1",
+      "schedule": "0 6 * * 1-5"
+    },
+    {
       "path": "/api/cron/refresh-cospick-overseas",
       "schedule": "0 11 * * 1-5"
+    },
+    {
+      "path": "/api/cron/refresh-cospick-overseas?backup=1",
+      "schedule": "0 12 * * 1-5"
     }
   ]
 }

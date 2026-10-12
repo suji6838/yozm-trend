@@ -2,7 +2,11 @@ const KIS_APP_KEY = process.env.KIS_APP_KEY;
 const KIS_APP_SECRET = process.env.KIS_APP_SECRET;
 const KIS_BASE = "https://openapi.koreainvestment.com:9443"; // 실전투자
 
-let cachedToken: { accessToken: string; expiresAt: number } | null = null;
+// KIS 응답이 멈춘 채 돌아오지 않으면 그 요청 하나가 함수 실행 시간(maxDuration)을 통째로
+// 잡아먹어 알림 없이 강제 종료된다 — 요청마다 상한을 둬서 해당 종목만 실패로 처리되게 한다.
+const KIS_TIMEOUT_MS = 15_000;
+
+let cachedToken:{ accessToken: string; expiresAt: number } | null = null;
 let inFlightIssue: Promise<string> | null = null;
 
 async function issueAccessToken() {
@@ -14,6 +18,7 @@ async function issueAccessToken() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(KIS_TIMEOUT_MS),
     body: JSON.stringify({
       grant_type: "client_credentials",
       appkey: KIS_APP_KEY,
@@ -88,6 +93,7 @@ async function rawKisFetch(
       tr_id: trId,
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(KIS_TIMEOUT_MS),
   });
   const data = (await res.json()) as Record<string, unknown> & { rt_cd?: string };
   if (!res.ok || data.rt_cd === "1") {
@@ -259,6 +265,21 @@ export type KisOverseasDailyBar = {
   changePct: number;
 };
 
+// 미국 정규장 마감(16:00 ET) 전에는 일별시세 맨 앞에 당일 날짜 봉이 프리마켓/장중 가격과
+// 그때까지의 거래량(프리마켓이면 평소의 0.1% 수준)으로 미리 내려온다. 이 봉을 종가로 쓰면
+// "전일 종가 기준"이라는 전제가 깨지고 거래량 점수도 항상 0점이 되므로, 진행 중인 봉인지
+// 판별해 걸러낸다.
+function isUsSessionInProgress(xymd: string) {
+  const [date, time] = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/New_York",
+    dateStyle: "short",
+    timeStyle: "short",
+  })
+    .format(new Date())
+    .split(" ");
+  return xymd === date.replace(/-/g, "") && time < "16:00";
+}
+
 // 해외주식은 국내와 달리 거래대금순위 조회 API가 없어 고정 종목 리스트를 순회하며
 // 종목별 일별시세만 조회한다. GUBN "0"=일봉, MODP "0"=수정주가 미반영.
 export async function getOverseasDailyChart(excd: string, symb: string, count = 90) {
@@ -271,7 +292,7 @@ export async function getOverseasDailyChart(excd: string, symb: string, count = 
   // output2는 최신일→과거 순으로 내려오므로, 최근 count개를 골라 과거→최신 순으로 뒤집음
   // sign: 1/2=상승, 4/5=하락 — rate 절대값에 부호를 붙여준다.
   return data.output2
-    .filter((d) => d.xymd)
+    .filter((d) => d.xymd && !isUsSessionInProgress(d.xymd))
     .slice(0, count)
     .reverse()
     .map((d): KisOverseasDailyBar => {
