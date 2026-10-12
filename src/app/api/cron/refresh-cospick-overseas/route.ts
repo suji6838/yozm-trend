@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OVERSEAS_SCORE_MAX, refreshOverseasCospickSnapshot } from "@/lib/cospickOverseas";
 import { beginCronRun, getCronRuns, hasRecentOkRun } from "@/lib/cronRunLog";
+import { isUsMarketOpenToday } from "@/lib/kis";
 import { sendNtfy } from "@/lib/ntfy";
 
 // 50개 안팎 고정 종목 리스트를 순차 조회(약 800ms 간격)하므로 40~80초 정도 소요될 수 있어
@@ -25,6 +26,13 @@ export async function GET(req: NextRequest) {
   if (isBackup && hasRecentOkRun(runs, SKIP_IF_OK_WITHIN_MS)) {
     await finish("skipped", "recent ok run");
     return NextResponse.json({ ok: true, skipped: true });
+  }
+
+  // 미국 휴장일에는 직전 거래일 데이터로 같은 추천이 반복될 뿐이라 스캔도 알림도 하지 않는다
+  // (보유 종목 목록도 그대로 둔다).
+  if (!(await isUsMarketOpenToday())) {
+    await finish("skipped", "market closed");
+    return NextResponse.json({ ok: true, skipped: true, reason: "market closed" });
   }
 
   let snapshot;

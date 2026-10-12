@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COSPICK_SCORE_MAX, refreshCospickAndExitCheck } from "@/lib/cospick";
 import { beginCronRun, getCronRuns, hasRecentOkRun } from "@/lib/cronRunLog";
+import { isDomesticMarketOpenToday } from "@/lib/kis";
 import { sendNtfy } from "@/lib/ntfy";
 import { kstHHmm } from "@/lib/time";
 
@@ -26,6 +27,13 @@ export async function GET(req: NextRequest) {
   if (isBackup && hasRecentOkRun(runs, SKIP_IF_OK_WITHIN_MS)) {
     await finish("skipped", "recent ok run");
     return NextResponse.json({ ok: true, skipped: true });
+  }
+
+  // 휴장일에는 직전 거래일 데이터로 같은 추천이 반복될 뿐이라 스캔도 알림도 하지 않는다
+  // (보유 종목 목록도 그대로 둔다).
+  if (!(await isDomesticMarketOpenToday())) {
+    await finish("skipped", "market closed");
+    return NextResponse.json({ ok: true, skipped: true, reason: "market closed" });
   }
 
   const time = kstHHmm();

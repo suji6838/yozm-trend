@@ -269,7 +269,8 @@ export type KisOverseasDailyBar = {
 // 그때까지의 거래량(프리마켓이면 평소의 0.1% 수준)으로 미리 내려온다. 이 봉을 종가로 쓰면
 // "전일 종가 기준"이라는 전제가 깨지고 거래량 점수도 항상 0점이 되므로, 진행 중인 봉인지
 // 판별해 걸러낸다.
-function isUsSessionInProgress(xymd: string) {
+// 미국 동부시간 기준 현재 날짜(YYYYMMDD)와 시각(HH:mm)
+function usEasternNow() {
   const [date, time] = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "America/New_York",
     dateStyle: "short",
@@ -277,22 +278,61 @@ function isUsSessionInProgress(xymd: string) {
   })
     .format(new Date())
     .split(" ");
-  return xymd === date.replace(/-/g, "") && time < "16:00";
+  return { date: date.replace(/-/g, ""), time };
 }
 
-// 해외주식은 국내와 달리 거래대금순위 조회 API가 없어 고정 종목 리스트를 순회하며
-// 종목별 일별시세만 조회한다. GUBN "0"=일봉, MODP "0"=수정주가 미반영.
-export async function getOverseasDailyChart(excd: string, symb: string, count = 90) {
+function isUsSessionInProgress(xymd: string) {
+  const now = usEasternNow();
+  return xymd === now.date && now.time < "16:00";
+}
+
+// output2는 최신일→과거 순으로 내려온다. GUBN "0"=일봉, MODP "0"=수정주가 미반영.
+async function fetchOverseasDailyRows(excd: string, symb: string) {
   const data = (await kisFetch(
     "/uapi/overseas-price/v1/quotations/dailyprice",
     "HHDFS76240000",
     { AUTH: "", EXCD: excd, SYMB: symb, GUBN: "0", BYMD: "", MODP: "0" },
   )) as { output2: { xymd: string; clos: string; tvol: string; rate: string; sign: string }[] };
+  return data.output2.filter((d) => d.xymd);
+}
 
-  // output2는 최신일→과거 순으로 내려오므로, 최근 count개를 골라 과거→최신 순으로 뒤집음
+// 미국 장이 오늘(동부시간) 열리는지 — 거래일이면 프리마켓(04:00 ET)부터 당일 날짜 봉이
+// 내려오고, 휴장일이면 직전 거래일 봉이 맨 앞에 남는다. 조회가 실패하면 열린 것으로 보고
+// 평소대로 진행한다(휴장 판별 실패 때문에 정상 거래일 알림까지 빠지지 않도록).
+export async function isUsMarketOpenToday() {
+  try {
+    const rows = await fetchOverseasDailyRows("NAS", "AAPL");
+    return rows[0]?.xymd === usEasternNow().date;
+  } catch (error) {
+    console.error("US market open check failed:", error);
+    return true;
+  }
+}
+
+// 국내 장이 오늘(한국시간) 열렸는지 — 거래일이면 개장 후 당일 날짜 봉이 생기고, 휴장일이면
+// 직전 거래일 봉이 마지막에 남는다. 조회 실패 시 열린 것으로 본다(위와 같은 이유).
+export async function isDomesticMarketOpenToday() {
+  try {
+    const bars = await getDailyChart("005930", 1);
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" })
+      .format(new Date())
+      .replace(/-/g, "");
+    return bars[bars.length - 1]?.date === today;
+  } catch (error) {
+    console.error("Domestic market open check failed:", error);
+    return true;
+  }
+}
+
+// 해외주식은 국내와 달리 거래대금순위 조회 API가 없어 고정 종목 리스트를 순회하며
+// 종목별 일별시세만 조회한다.
+export async function getOverseasDailyChart(excd: string, symb: string, count = 90) {
+  const rows = await fetchOverseasDailyRows(excd, symb);
+
+  // 최근 count개를 골라 과거→최신 순으로 뒤집음
   // sign: 1/2=상승, 4/5=하락 — rate 절대값에 부호를 붙여준다.
-  return data.output2
-    .filter((d) => d.xymd && !isUsSessionInProgress(d.xymd))
+  return rows
+    .filter((d) => !isUsSessionInProgress(d.xymd))
     .slice(0, count)
     .reverse()
     .map((d): KisOverseasDailyBar => {
