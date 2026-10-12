@@ -3,7 +3,7 @@ import {
   getVolumeRankUniverse,
   getIndexAboveMa20,
   getDailyChart,
-  getCurrentPrice,
+  getDailyChartWithPrice,
   KisVolumeRankItem,
 } from "./kis";
 
@@ -315,7 +315,12 @@ export async function getCospickHistory(): Promise<CospickHistoryEntry[]> {
   return getCospickHistoryRaw();
 }
 
-// ── 다음날 09:10 매도 체크 (전날 14시 30분 스캔가를 매수가로 가정) ──────────
+// ── 보유 종목 추적 (추천 종목을 매도 신호가 날 때까지 매번 매도/홀딩으로 판정) ──
+// 매수 후보는 스캔할 때마다 바뀌므로, 한 번 추천된 종목은 별도 목록(positions)에 담아두고
+// 이후 매 실행마다 다시 평가한다. 기준은 추세: 현재가가 20일선 위면 홀딩, 이탈하면 매도.
+// 매도 신호 없이 MAX_HOLD_DAYS 거래일이 지나면 기간 만료로 매도 처리해 목록에서 뺀다.
+export const MAX_HOLD_DAYS = 5;
+
 export type ExitCheckItem = {
   code: string;
   name: string;
@@ -323,31 +328,90 @@ export type ExitCheckItem = {
   currentPrice: number;
   changePct: number;
   action: string;
+  sell: boolean;
+  heldDays: number; // 최초 추천 이후 지난 거래일 수
 };
 
-export function classifyExit(pct: number): string {
-  if (pct >= 3) return "🟢 전량 익절";
-  if (pct >= -1.5) return "🟡 09:10 전량 매도";
-  if (pct >= -3) return "🟠 원칙적으로 손절";
-  return "🔴 악재 확인 후 즉시 대응";
+// 통화 무관 순수 함수라 해외판(cospickOverseas.ts)에서도 그대로 재사용한다.
+export function classifyHolding(price: number, ma20: number, heldDays: number) {
+  if (price < ma20) return { sell: true, action: "🔴 매도 (20일선 이탈)" };
+  if (heldDays >= MAX_HOLD_DAYS) {
+    return { sell: true, action: `⏰ 매도 (${MAX_HOLD_DAYS}거래일 경과)` };
+  }
+  return {
+    sell: false,
+    action: heldDays === 0 ? "🟢 홀딩 (당일 추천)" : `🟢 홀딩 (${heldDays}일차)`,
+  };
 }
 
-async function buildExitCheck(snapshot: CospickSnapshot): Promise<ExitCheckItem[]> {
-  return Promise.all(
-    snapshot.candidates.map(async (candidate) => {
-      const price = await getCurrentPrice(candidate.code);
-      const current = Number(price.stck_prpr);
-      const pct = ((current - candidate.price) / candidate.price) * 100;
-      return {
-        code: candidate.code,
-        name: candidate.name,
-        entryPrice: candidate.price,
-        currentPrice: current,
-        changePct: Math.round(pct * 100) / 100,
-        action: classifyExit(pct),
-      };
-    }),
-  );
+type CospickPosition = {
+  code: string;
+  name: string;
+  entryPrice: number; // 최초 추천 시점 스캔가(매수가로 가정)
+  entryDate: string; // YYYYMMDD (한국시간 기준)
+};
+
+const POSITIONS_PATHNAME = "cospick-positions.json";
+
+function toKstYyyymmdd(iso: string) {
+  return toKstDateKey(iso).replace(/-/g, "");
+}
+
+// 파일이 아직 없으면 null(최초 실행 → 직전 스냅샷으로 시드). 조회 오류는 삼키지 않고
+// 그대로 던진다 — 빈 목록으로 오인해 추적 중이던 종목을 통째로 잃지 않기 위함.
+async function getPositions(): Promise<CospickPosition[] | null> {
+  const result = await get(POSITIONS_PATHNAME, { access: "private" });
+  if (!result) return null;
+  if (result.statusCode !== 200) throw new Error("cospick positions blob not readable");
+  const text = await new Response(result.stream).text();
+  return JSON.parse(text) as CospickPosition[];
+}
+
+async function savePositions(positions: CospickPosition[]) {
+  await put(POSITIONS_PATHNAME, JSON.stringify(positions), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
+
+async function evaluatePosition(position: CospickPosition, today: string): Promise<ExitCheckItem> {
+  const base = {
+    code: position.code,
+    name: position.name,
+    entryPrice: position.entryPrice,
+  };
+  try {
+    const { bars, currentPrice } = await getDailyChartWithPrice(position.code, 30);
+    if (bars.length === 0 || currentPrice <= 0) throw new Error("no chart data");
+
+    // 장중에는 오늘 일봉이 아직 확정 전이라, 오늘 봉은 빼고 현재가를 마지막 값으로 넣어
+    // 20일선을 계산한다(휴장일이면 오늘 봉이 없어 직전 거래일 기준 그대로).
+    const pastCloses = bars.filter((b) => b.date < today).map((b) => b.close);
+    const ma20 = sma([...pastCloses.slice(-19), currentPrice], 20);
+    const heldDays = bars.filter((b) => b.date > position.entryDate).length;
+    const pct = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+
+    return {
+      ...base,
+      currentPrice,
+      changePct: Math.round(pct * 100) / 100,
+      heldDays,
+      ...classifyHolding(currentPrice, ma20, heldDays),
+    };
+  } catch (error) {
+    // 한 종목 조회 실패로 전체 체크가 죽지 않게 하고, 종목은 목록에 남겨 다음 실행에서 재평가.
+    console.error(`cospick position check failed for ${position.code}:`, error);
+    return {
+      ...base,
+      currentPrice: position.entryPrice,
+      changePct: 0,
+      heldDays: 0,
+      sell: false,
+      action: "⚠️ 시세 조회 실패 — 다음 체크로 이월",
+    };
+  }
 }
 
 const EXIT_CHECK_PATHNAME = "exit-check-latest.json";
@@ -374,26 +438,51 @@ export async function getExitCheck(): Promise<ExitCheckItem[]> {
   }
 }
 
-// cron 전용 — 저장된 코스픽 스냅샷 기준으로 현재가를 새로 조회해 Blob에 저장한다.
-async function refreshExitCheck(prevSnapshot: CospickSnapshot | null): Promise<ExitCheckItem[]> {
-  const items = prevSnapshot ? await buildExitCheck(prevSnapshot) : [];
-  await saveExitCheck(items);
-  return items;
-}
-
-// cron 전용 — 해외판(cospickOverseas.ts)과 동일하게, 매도체크와 매수스캔을 한 요청
-// 안에서 순서대로 처리한다. 이전 스냅샷을 먼저 읽어 매도체크를 끝낸 뒤에 새 스냅샷으로
-// 덮어써서, 두 크론을 따로 스케줄링해 실행 순서를 맞추던 방식(타이밍 의존, 누락 위험)을
-// 없앤다. 매수/매도는 서로 다른 기준(매수=오늘 스캔한 새 후보, 매도=직전 추천 종목의
-// 현재가)으로 계산되므로 같은 종목일 필요가 없다.
+// cron 전용 — 해외판(cospickOverseas.ts)과 동일하게, 보유 종목 체크와 매수스캔을 한 요청
+// 안에서 순서대로 처리한다(두 크론을 따로 스케줄링해 실행 순서를 맞추던 방식은 타이밍
+// 의존·누락 위험이 있어 쓰지 않는다). 순서: ① 추적 중인 종목 매도/홀딩 판정 →
+// ② 매도된 종목을 목록에서 제거 → ③ 새 매수 후보 스캔 → ④ 새 후보를 목록에 추가.
 export type CospickRefreshResult = {
   snapshot: CospickSnapshot;
   exitItems: ExitCheckItem[];
 };
 
 export async function refreshCospickAndExitCheck(): Promise<CospickRefreshResult> {
-  const prevSnapshot = await getCospickSnapshot();
-  const exitItems = await refreshExitCheck(prevSnapshot);
+  const now = new Date().toISOString();
+  const today = toKstYyyymmdd(now);
+
+  let positions = await getPositions();
+  if (!positions) {
+    const prevSnapshot = await getCospickSnapshot();
+    const seedDate = prevSnapshot ? toKstYyyymmdd(prevSnapshot.generatedAt) : today;
+    positions = (prevSnapshot?.candidates ?? []).map((c) => ({
+      code: c.code,
+      name: c.name,
+      entryPrice: c.price,
+      entryDate: seedDate,
+    }));
+  }
+
+  const evaluated = await Promise.all(positions.map((p) => evaluatePosition(p, today)));
+  // 알림/화면에서 매도 종목이 먼저 보이도록 정렬
+  const exitItems = [...evaluated].sort((a, b) => Number(b.sell) - Number(a.sell));
+  await saveExitCheck(exitItems);
+
+  // 스캔이 실패하더라도 이미 알린 매도 종목이 다음 실행에서 또 매도로 뜨지 않도록 먼저 저장.
+  const soldCodes = new Set(exitItems.filter((i) => i.sell).map((i) => i.code));
+  const kept = positions.filter((p) => !soldCodes.has(p.code));
+  await savePositions(kept);
+
   const snapshot = await refreshCospickSnapshot();
+
+  // 이미 추적 중인 종목이 다시 추천되면 최초 추천가/추천일을 유지한다. 방금 매도 판정한
+  // 종목은 같은 실행에서 다시 담지 않는다(같은 알림에 매도와 신규 편입이 겹치는 모순 방지 —
+  // 다음 실행에서도 여전히 후보면 그때 새로 담긴다).
+  const heldCodes = new Set(kept.map((p) => p.code));
+  const added = snapshot.candidates
+    .filter((c) => !heldCodes.has(c.code) && !soldCodes.has(c.code))
+    .map((c) => ({ code: c.code, name: c.name, entryPrice: c.price, entryDate: today }));
+  if (added.length > 0) await savePositions([...kept, ...added]);
+
   return { snapshot, exitItems };
 }

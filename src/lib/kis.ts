@@ -138,6 +138,12 @@ function yyyymmdd(d: Date) {
 
 // 주말/공휴일 감안해 count의 2배(최소 60일) 범위로 조회 후 최근 거래일 count개만 사용
 export async function getDailyChart(stockCode: string, count = 20) {
+  return (await getDailyChartWithPrice(stockCode, count)).bars;
+}
+
+// 보유 종목 추적용 — 같은 응답의 output1에 현재가가 함께 내려오므로, 현재가 API를 따로
+// 부르지 않고 일별시세와 현재가를 한 번의 호출로 받는다(초당 호출 제한 절약).
+export async function getDailyChartWithPrice(stockCode: string, count = 20) {
   const end = new Date();
   const start = new Date();
   start.setDate(end.getDate() - Math.max(60, count * 2));
@@ -153,10 +159,13 @@ export async function getDailyChart(stockCode: string, count = 20) {
       FID_PERIOD_DIV_CODE: "D",
       FID_ORG_ADJ_PRC: "0",
     },
-  )) as { output2: { stck_bsop_date: string; stck_clpr: string; acml_vol: string }[] };
+  )) as {
+    output1?: { stck_prpr?: string };
+    output2: { stck_bsop_date: string; stck_clpr: string; acml_vol: string }[];
+  };
 
   // output2는 최신일→과거 순으로 내려오므로, 최근 count개를 골라 과거→최신 순으로 뒤집음
-  return data.output2
+  const bars = data.output2
     .filter((d) => d.stck_bsop_date)
     .slice(0, count)
     .reverse()
@@ -167,6 +176,10 @@ export async function getDailyChart(stockCode: string, count = 20) {
         volume: Number(d.acml_vol),
       }),
     );
+
+  // output1에 현재가가 없으면(0/누락) 가장 최근 일봉 종가로 대신한다.
+  const currentPrice = Number(data.output1?.stck_prpr) || (bars[bars.length - 1]?.close ?? 0);
+  return { bars, currentPrice };
 }
 
 export type KisVolumeRankItem = {

@@ -3,8 +3,8 @@ import { OVERSEAS_SCORE_MAX, refreshOverseasCospickSnapshot } from "@/lib/cospic
 import { sendNtfy } from "@/lib/ntfy";
 
 // 50개 안팎 고정 종목 리스트를 순차 조회(약 800ms 간격)하므로 40~80초 정도 소요될 수 있어
-// 여유있게 설정. 매수 후보 스캔과 매도 체크를 같은 요청에서 함께 처리한다(둘 다 전일 종가
-// 기준이라 국내처럼 별도 크론이 필요 없음).
+// 여유있게 설정. 매수 후보 스캔과 보유 종목(매도/홀딩) 체크를 같은 요청에서 함께 처리한다
+// (둘 다 전일 종가 기준이라 스캔에서 받은 일별시세를 그대로 재사용).
 export const maxDuration = 120;
 
 export async function GET(req: NextRequest) {
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (snapshot.exitCheck.length === 0) {
-    await sendNtfy("해외 코스픽 매도 체크", "어제 추천된 종목이 없습니다.");
+    await sendNtfy("해외 코스픽 보유 종목 체크", "추적 중인 추천 종목이 없습니다.");
   } else {
     const lines = snapshot.exitCheck.map(
       (item) =>
@@ -47,7 +47,11 @@ export async function GET(req: NextRequest) {
           item.changePct >= 0 ? "+" : ""
         }${item.changePct}%) ${item.action}`,
     );
-    await sendNtfy("해외 코스픽 매도 체크", lines.join("\n"));
+    const sellCount = snapshot.exitCheck.filter((i) => i.sell).length;
+    await sendNtfy(
+      `해외 코스픽 보유 종목 체크 (매도 ${sellCount} · 홀딩 ${snapshot.exitCheck.length - sellCount})`,
+      lines.join("\n"),
+    );
   }
 
   return NextResponse.json({

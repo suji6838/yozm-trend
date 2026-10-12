@@ -3,9 +3,10 @@ import { COSPICK_SCORE_MAX, refreshCospickAndExitCheck } from "@/lib/cospick";
 import { sendNtfy } from "@/lib/ntfy";
 import { kstHHmm } from "@/lib/time";
 
-// 30개 종목 스크리닝(거래량순위 1회 + 지수 2회 + 종목별 일별차트 최대 30회) +
-// 직전 추천 종목 현재가 조회(최대 3회)를 한 요청에서 순차 처리하므로 여유있게 설정.
-export const maxDuration = 100;
+// 30개 종목 스크리닝(거래량순위 2회 + 지수 2회 + 종목별 일별차트 최대 30회) +
+// 추적 중인 보유 종목 체크(종목당 1회, 최대 5거래일치 누적)를 한 요청에서 800ms 간격으로
+// 순차 처리하므로 여유있게 설정.
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (exitItems.length === 0) {
-    await sendNtfy(`코스픽 ${time} 매도 체크`, "최근 추천된 종목이 없습니다.");
+    await sendNtfy(`코스픽 ${time} 보유 종목 체크`, "추적 중인 추천 종목이 없습니다.");
   } else {
     const lines = exitItems.map(
       (i) =>
@@ -51,7 +52,11 @@ export async function GET(req: NextRequest) {
           "ko-KR",
         )} (${i.changePct >= 0 ? "+" : ""}${i.changePct}%) ${i.action}`,
     );
-    await sendNtfy(`코스픽 ${time} 매도 체크`, lines.join("\n"));
+    const sellCount = exitItems.filter((i) => i.sell).length;
+    await sendNtfy(
+      `코스픽 ${time} 보유 종목 체크 (매도 ${sellCount} · 홀딩 ${exitItems.length - sellCount})`,
+      lines.join("\n"),
+    );
   }
 
   return NextResponse.json({

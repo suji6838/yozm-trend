@@ -1,6 +1,6 @@
 import { put, get } from "@vercel/blob";
-import { getOverseasDailyChart } from "./kis";
-import { sma, scoreTrend, classifyExit } from "./cospick";
+import { getOverseasDailyChart, KisOverseasDailyBar } from "./kis";
+import { sma, scoreTrend, classifyHolding } from "./cospick";
 import { OVERSEAS_UNIVERSE, OverseasTicker } from "./overseasTickers";
 
 // 국내판과 달리 거래대금·시장분위기 점수는 뺀다 — 해외는 종목군 자체가 고정된 대형주
@@ -56,6 +56,8 @@ export type OverseasExitItem = {
   currentPrice: number;
   changePct: number;
   action: string;
+  sell: boolean;
+  heldDays: number; // 최초 추천 이후 지난 거래일 수
 };
 
 export type OverseasCospickSnapshot = {
@@ -65,7 +67,10 @@ export type OverseasCospickSnapshot = {
   generatedAt: string;
 };
 
-async function evaluateTicker(ticker: OverseasTicker): Promise<OverseasCandidate | null> {
+// 보유 종목 체크에서 같은 일별시세를 재사용할 수 있도록 bars도 함께 반환한다.
+async function evaluateTicker(
+  ticker: OverseasTicker,
+): Promise<{ candidate: OverseasCandidate; bars: KisOverseasDailyBar[] } | null> {
   const bars = await getOverseasDailyChart(ticker.exchange, ticker.symbol, 90);
   if (bars.length < 61) return null;
 
@@ -81,7 +86,7 @@ async function evaluateTicker(ticker: OverseasTicker): Promise<OverseasCandidate
   const reasons = [...trend.reasons, ...volume.reasons];
   if (exclusionReason) reasons.unshift(`⚠️ ${exclusionReason} — 주의 종목`);
 
-  return {
+  const candidate: OverseasCandidate = {
     symbol: ticker.symbol,
     exchange: ticker.exchange,
     name: ticker.name,
@@ -92,11 +97,43 @@ async function evaluateTicker(ticker: OverseasTicker): Promise<OverseasCandidate
     reasons,
     caution: exclusionReason ?? undefined,
   };
+  return { candidate, bars };
 }
 
-async function buildOverseasSnapshot(): Promise<OverseasCospickSnapshot> {
-  const prev = await getOverseasCospickSnapshot();
+// ── 보유 종목 추적 — 국내판(cospick.ts)과 같은 규칙: 종가가 20일선 위면 홀딩, 이탈하면
+// 매도, 매도 신호 없이 MAX_HOLD_DAYS 거래일이 지나면 기간 만료 매도.
+type OverseasPosition = {
+  symbol: string;
+  name: string;
+  entryPrice: number; // 최초 추천 시점 종가(매수가로 가정)
+  entryDate: string; // YYYYMMDD — 추천 근거가 된 일봉의 날짜(미국 현지 기준)
+};
 
+const OVERSEAS_POSITIONS_PATHNAME = "cospick-overseas-positions.json";
+
+// 파일이 아직 없으면 null(최초 실행 → 직전 스냅샷으로 시드). 조회 오류는 삼키지 않고
+// 그대로 던진다 — 빈 목록으로 오인해 추적 중이던 종목을 통째로 잃지 않기 위함.
+async function getOverseasPositions(): Promise<OverseasPosition[] | null> {
+  const result = await get(OVERSEAS_POSITIONS_PATHNAME, { access: "private" });
+  if (!result) return null;
+  if (result.statusCode !== 200) throw new Error("overseas positions blob not readable");
+  const text = await new Response(result.stream).text();
+  return JSON.parse(text) as OverseasPosition[];
+}
+
+async function saveOverseasPositions(positions: OverseasPosition[]) {
+  await put(OVERSEAS_POSITIONS_PATHNAME, JSON.stringify(positions), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
+
+async function buildOverseasSnapshot(): Promise<{
+  snapshot: OverseasCospickSnapshot;
+  positions: OverseasPosition[];
+}> {
   const evaluated = await Promise.all(
     OVERSEAS_UNIVERSE.map(async (ticker) => {
       try {
@@ -108,36 +145,84 @@ async function buildOverseasSnapshot(): Promise<OverseasCospickSnapshot> {
     }),
   );
 
-  const results = evaluated.filter((c): c is OverseasCandidate => c !== null);
+  const scanned = evaluated.filter((e): e is NonNullable<typeof e> => e !== null);
+  const results = scanned.map((e) => e.candidate);
   const clean = results.filter((c) => !c.caution).sort((a, b) => b.score.total - a.score.total);
   const risky = results.filter((c) => c.caution).sort((a, b) => b.score.total - a.score.total);
   const candidates = [...clean, ...risky].slice(0, 3);
 
-  // 매도 체크: 어제 후보 종목을, 오늘 스캔에서 이미 받아온 전체 유니버스 종가로 재평가한다.
-  // 해외는 전일 종가 기준으로만 다루므로(장중 실시간 조회 없음) 국내처럼 별도 크론/API
-  // 호출이 필요 없다 — 오늘 스캔 데이터를 그대로 재사용.
-  const latestBySymbol = new Map(results.map((c) => [c.symbol, c]));
-  const exitCheck: OverseasExitItem[] = (prev?.candidates ?? []).flatMap((prevCandidate) => {
-    const latest = latestBySymbol.get(prevCandidate.symbol);
-    if (!latest) return [];
-    const pct = ((latest.price - prevCandidate.price) / prevCandidate.price) * 100;
-    return [
-      {
-        symbol: prevCandidate.symbol,
-        name: prevCandidate.name,
-        entryPrice: prevCandidate.price,
-        currentPrice: latest.price,
-        changePct: Math.round(pct * 100) / 100,
-        action: classifyExit(pct),
-      },
-    ];
-  });
+  // 보유 종목 체크: 추적 중인 종목을, 오늘 스캔에서 이미 받아온 전체 유니버스 일별시세로
+  // 재평가한다. 해외는 전일 종가 기준으로만 다루므로(장중 실시간 조회 없음) 국내처럼 별도
+  // API 호출이 필요 없다 — 오늘 스캔 데이터를 그대로 재사용.
+  const barsBySymbol = new Map(scanned.map((e) => [e.candidate.symbol, e.bars]));
+
+  let positions = await getOverseasPositions();
+  if (!positions) {
+    const prev = await getOverseasCospickSnapshot();
+    positions = (prev?.candidates ?? []).map((c) => {
+      // 직전 스냅샷에는 일봉 날짜가 없어, 추천가와 종가가 일치하는 봉을 찾아 추천일로 삼는다.
+      const bars = barsBySymbol.get(c.symbol) ?? [];
+      const entryBar = [...bars].reverse().find((b) => b.close === c.price) ?? bars[bars.length - 2];
+      return { symbol: c.symbol, name: c.name, entryPrice: c.price, entryDate: entryBar?.date ?? "" };
+    });
+  }
+
+  const kept: OverseasPosition[] = [];
+  const soldSymbols = new Set<string>();
+  const exitCheck: OverseasExitItem[] = [];
+  for (const position of positions) {
+    const bars = barsBySymbol.get(position.symbol);
+    if (!bars) {
+      // 이번 스캔에서 시세 조회가 실패한 종목 — 목록에 남겨 다음 실행에서 재평가.
+      kept.push(position);
+      continue;
+    }
+    const price = bars[bars.length - 1].close;
+    const ma20 = sma(
+      bars.map((b) => b.close),
+      20,
+    );
+    const heldDays = bars.filter((b) => b.date > position.entryDate).length;
+    const pct = ((price - position.entryPrice) / position.entryPrice) * 100;
+    const verdict = classifyHolding(price, ma20, heldDays);
+    exitCheck.push({
+      symbol: position.symbol,
+      name: position.name,
+      entryPrice: position.entryPrice,
+      currentPrice: price,
+      changePct: Math.round(pct * 100) / 100,
+      heldDays,
+      ...verdict,
+    });
+    if (verdict.sell) soldSymbols.add(position.symbol);
+    else kept.push(position);
+  }
+  // 알림/화면에서 매도 종목이 먼저 보이도록 정렬
+  exitCheck.sort((a, b) => Number(b.sell) - Number(a.sell));
+
+  // 이미 추적 중인 종목이 다시 추천되면 최초 추천가/추천일을 유지한다. 방금 매도 판정한
+  // 종목은 같은 실행에서 다시 담지 않는다(다음 실행에서도 여전히 후보면 그때 새로 담긴다).
+  const heldSymbols = new Set(kept.map((p) => p.symbol));
+  const added = candidates
+    .filter((c) => !heldSymbols.has(c.symbol) && !soldSymbols.has(c.symbol))
+    .map((c) => {
+      const bars = barsBySymbol.get(c.symbol) ?? [];
+      return {
+        symbol: c.symbol,
+        name: c.name,
+        entryPrice: c.price,
+        entryDate: bars[bars.length - 1]?.date ?? "",
+      };
+    });
 
   return {
-    candidates,
-    exitCheck,
-    scanned: OVERSEAS_UNIVERSE.length,
-    generatedAt: new Date().toISOString(),
+    snapshot: {
+      candidates,
+      exitCheck,
+      scanned: OVERSEAS_UNIVERSE.length,
+      generatedAt: new Date().toISOString(),
+    },
+    positions: [...kept, ...added],
   };
 }
 
@@ -167,8 +252,9 @@ export async function getOverseasCospickSnapshot(): Promise<OverseasCospickSnaps
 
 // cron 전용 — 실제로 KIS를 호출해 새로 스캔하고 Blob에 저장한다.
 export async function refreshOverseasCospickSnapshot(): Promise<OverseasCospickSnapshot> {
-  const snapshot = await buildOverseasSnapshot();
+  const { snapshot, positions } = await buildOverseasSnapshot();
   await saveOverseasSnapshot(snapshot);
+  await saveOverseasPositions(positions);
   await appendOverseasCospickHistory(snapshot);
   return snapshot;
 }

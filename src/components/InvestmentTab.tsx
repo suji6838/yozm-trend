@@ -6,7 +6,7 @@ import type {
   ExitCheckItem,
   CospickHistoryEntry,
 } from "@/lib/cospick";
-import { COSPICK_SCORE_MAX } from "@/lib/cospick";
+import { COSPICK_SCORE_MAX, MAX_HOLD_DAYS } from "@/lib/cospick";
 import type {
   OverseasCospickSnapshot,
   OverseasCandidate,
@@ -333,19 +333,19 @@ export default function InvestmentTab({
       )}
 
       <div className="mt-6 rounded-2xl border border-zinc-100 bg-white p-5 text-xs text-zinc-500 shadow-sm">
-        <p className="font-semibold text-zinc-700">다음날 09:10 매도 가이드 (참고용, 자동 실행 안 됨)</p>
+        <p className="font-semibold text-zinc-700">매도/홀딩 가이드 (참고용, 자동 실행 안 됨)</p>
         <ul className="mt-2 space-y-1">
-          <li>+3% 이상 → 전량 익절</li>
-          <li>+1~3% / 0~-1.5% → 09:10 전량 매도</li>
-          <li>-1.5~-3% → 원칙적으로 손절</li>
-          <li>-3% 이하 → 악재 여부 확인 후 즉시 대응</li>
+          <li>추천된 종목은 매도 신호가 날 때까지 매 스캔마다 다시 체크합니다.</li>
+          <li>현재가가 20일선 위 → 홀딩</li>
+          <li>현재가가 20일선 이탈 → 매도</li>
+          <li>매도 신호 없이 {MAX_HOLD_DAYS}거래일 경과 → 기간 만료 매도</li>
         </ul>
       </div>
 
       {exitCheck.length > 0 && (
         <div className="mt-4 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold text-zinc-700">
-            위 후보 매수가 대비 현재가 (14시 30분 스캔가 기준, 실제 체결가와 다를 수 있음)
+            추적 중인 추천 종목 — 최초 추천가 대비 현재가 (스캔가 기준, 실제 체결가와 다를 수 있음)
           </p>
           <div className="mt-1">
             {exitCheck.map((item) => (
@@ -406,7 +406,7 @@ export default function InvestmentTab({
             {overseasCospick.exitCheck.length > 0 && (
               <div className="mt-4 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
                 <p className="text-xs font-semibold text-zinc-700">
-                  어제 추천 종목 매수가 대비 오늘 종가 (전일 종가 기준, 실제 체결가와 다를 수 있음)
+                  추적 중인 추천 종목 — 최초 추천가 대비 최근 종가 (전일 종가 기준, 실제 체결가와 다를 수 있음)
                 </p>
                 <div className="mt-1">
                   {overseasCospick.exitCheck.map((item) => (
