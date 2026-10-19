@@ -19,7 +19,9 @@ export const COSPICK_SCORE_MAX = TREND_MAX + VOLUME_MAX + MARKET_MOOD_MAX;
 
 const TRADING_VALUE_MIN = 30_000_000_000; // 300억: 이 미만이면 매수금지
 const TRADING_VALUE_GOOD = 100_000_000_000; // 1,000억: B 거래대금 가점 기준
-const SURGE_LIMIT_PCT = 15; // 당일 +15% 이상 급등 → 매수금지
+// 당일 +5% 이상 급등 → 매수금지. 원래 +15%였으나 거래대금 상위 유니버스 특성상 당일 +6~14%
+// 오른 종목이 계속 추천돼 고점 추격 매수가 되던 문제로 낮춤(해외판도 같은 값 사용).
+export const SURGE_LIMIT_PCT = 5;
 const CRASH_LIMIT_PCT = -7; // 당일 -7% 이하 급락 → 매수금지
 
 // 통화 무관 순수 함수라 해외판(cospickOverseas.ts)에서도 그대로 재사용한다.
@@ -319,7 +321,10 @@ export async function getCospickHistory(): Promise<CospickHistoryEntry[]> {
 // 매수 후보는 스캔할 때마다 바뀌므로, 한 번 추천된 종목은 별도 목록(positions)에 담아두고
 // 이후 매 실행마다 다시 평가한다. 기준은 추세: 현재가가 20일선 위면 홀딩, 이탈하면 매도.
 // 매도 신호 없이 MAX_HOLD_DAYS 거래일이 지나면 기간 만료로 매도 처리해 목록에서 뺀다.
+// 추천가 대비 수익률이 TAKE_PROFIT_PCT 이상이면 익절, STOP_LOSS_PCT 이하이면 손절이 추세보다 우선.
 export const MAX_HOLD_DAYS = 5;
+export const TAKE_PROFIT_PCT = 5;
+export const STOP_LOSS_PCT = -3;
 
 export type ExitCheckItem = {
   code: string;
@@ -333,7 +338,10 @@ export type ExitCheckItem = {
 };
 
 // 통화 무관 순수 함수라 해외판(cospickOverseas.ts)에서도 그대로 재사용한다.
-export function classifyHolding(price: number, ma20: number, heldDays: number) {
+export function classifyHolding(price: number, entryPrice: number, ma20: number, heldDays: number) {
+  const pct = ((price - entryPrice) / entryPrice) * 100;
+  if (pct >= TAKE_PROFIT_PCT) return { sell: true, action: `💰 익절 (+${TAKE_PROFIT_PCT}% 도달)` };
+  if (pct <= STOP_LOSS_PCT) return { sell: true, action: `🛑 손절 (${STOP_LOSS_PCT}% 이탈)` };
   if (price < ma20) return { sell: true, action: "🔴 매도 (20일선 이탈)" };
   if (heldDays >= MAX_HOLD_DAYS) {
     return { sell: true, action: `⏰ 매도 (${MAX_HOLD_DAYS}거래일 경과)` };
@@ -398,7 +406,7 @@ async function evaluatePosition(position: CospickPosition, today: string): Promi
       currentPrice,
       changePct: Math.round(pct * 100) / 100,
       heldDays,
-      ...classifyHolding(currentPrice, ma20, heldDays),
+      ...classifyHolding(currentPrice, position.entryPrice, ma20, heldDays),
     };
   } catch (error) {
     // 한 종목 조회 실패로 전체 체크가 죽지 않게 하고, 종목은 목록에 남겨 다음 실행에서 재평가.

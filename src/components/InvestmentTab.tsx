@@ -6,7 +6,13 @@ import type {
   ExitCheckItem,
   CospickHistoryEntry,
 } from "@/lib/cospick";
-import { COSPICK_SCORE_MAX, MAX_HOLD_DAYS } from "@/lib/cospick";
+import {
+  COSPICK_SCORE_MAX,
+  MAX_HOLD_DAYS,
+  SURGE_LIMIT_PCT,
+  TAKE_PROFIT_PCT,
+  STOP_LOSS_PCT,
+} from "@/lib/cospick";
 import type {
   OverseasCospickSnapshot,
   OverseasCandidate,
@@ -291,7 +297,7 @@ export default function InvestmentTab({
         <p className="relative mt-2 max-w-xl text-sm text-blue-100">
           추세·거래량·시장분위기(만점 {COSPICK_SCORE_MAX}점)만 반영한 1단계 버전입니다.
           외국인/기관 수급, 장중 흐름, 뉴스 호재·악재 판별은 아직 반영되지 않았으니 참고용으로만
-          활용해주세요. 급등(+15%↑)·급락(-7%↓)·거래대금 300억 미만 종목은 후보에서 자동 제외됩니다.
+          활용해주세요. 급등(+{SURGE_LIMIT_PCT}%↑)·급락(-7%↓)·거래대금 300억 미만 종목은 후보에서 자동 제외됩니다.
         </p>
         <div className="relative mt-4 inline-flex flex-wrap items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs text-blue-50">
           <span>코스피 20일선 {marketMood.kospiAboveMa20 ? "위 🟢" : "아래 🔴"}</span>
@@ -336,6 +342,8 @@ export default function InvestmentTab({
         <p className="font-semibold text-zinc-700">매도/홀딩 가이드 (참고용, 자동 실행 안 됨)</p>
         <ul className="mt-2 space-y-1">
           <li>추천된 종목은 매도 신호가 날 때까지 매 스캔마다 다시 체크합니다.</li>
+          <li>추천가 대비 +{TAKE_PROFIT_PCT}% 이상 → 익절</li>
+          <li>추천가 대비 {STOP_LOSS_PCT}% 이하 → 손절</li>
           <li>현재가가 20일선 위 → 홀딩</li>
           <li>현재가가 20일선 이탈 → 매도</li>
           <li>매도 신호 없이 {MAX_HOLD_DAYS}거래일 경과 → 기간 만료 매도</li>
@@ -366,7 +374,7 @@ export default function InvestmentTab({
           </h2>
           <p className="relative mt-2 max-w-xl text-sm text-blue-100">
             실시간 시세가 아니라 미국장 마감 후 전일 종가로 계산합니다(한국시간 20:00 스캔).
-            추세·거래량(만점 {OVERSEAS_SCORE_MAX}점)만 반영한 버전입니다. 급등(+15%↑)·급락(-7%↓)
+            추세·거래량(만점 {OVERSEAS_SCORE_MAX}점)만 반영한 버전입니다. 급등(+{SURGE_LIMIT_PCT}%↑)·급락(-7%↓)
             종목은 후보에서 제외되지만, 3개 미만이면 주의 배지와 함께 보충됩니다.
           </p>
         </div>

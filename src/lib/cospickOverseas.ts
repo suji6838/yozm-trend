@@ -1,6 +1,6 @@
 import { put, get } from "@vercel/blob";
 import { getOverseasDailyChart, KisOverseasDailyBar } from "./kis";
-import { sma, scoreTrend, classifyHolding } from "./cospick";
+import { sma, scoreTrend, classifyHolding, SURGE_LIMIT_PCT } from "./cospick";
 import { OVERSEAS_UNIVERSE, OverseasTicker } from "./overseasTickers";
 
 // 국내판과 달리 거래대금·시장분위기 점수는 뺀다 — 해외는 종목군 자체가 고정된 대형주
@@ -10,7 +10,6 @@ const TREND_MAX = 20;
 const VOLUME_MAX = 5;
 export const OVERSEAS_SCORE_MAX = TREND_MAX + VOLUME_MAX;
 
-const SURGE_LIMIT_PCT = 15; // 당일 +15% 이상 급등 → 주의 종목
 const CRASH_LIMIT_PCT = -7; // 당일 -7% 이하 급락 → 주의 종목
 
 function scoreVolume(volumes: number[]) {
@@ -100,8 +99,8 @@ async function evaluateTicker(
   return { candidate, bars };
 }
 
-// ── 보유 종목 추적 — 국내판(cospick.ts)과 같은 규칙: 종가가 20일선 위면 홀딩, 이탈하면
-// 매도, 매도 신호 없이 MAX_HOLD_DAYS 거래일이 지나면 기간 만료 매도.
+// ── 보유 종목 추적 — 국내판(cospick.ts)과 같은 규칙: 익절/손절 기준 도달 시 매도, 종가가
+// 20일선 위면 홀딩, 이탈하면 매도, 매도 신호 없이 MAX_HOLD_DAYS 거래일이 지나면 기간 만료 매도.
 type OverseasPosition = {
   symbol: string;
   name: string;
@@ -184,7 +183,7 @@ async function buildOverseasSnapshot(): Promise<{
     );
     const heldDays = bars.filter((b) => b.date > position.entryDate).length;
     const pct = ((price - position.entryPrice) / position.entryPrice) * 100;
-    const verdict = classifyHolding(price, ma20, heldDays);
+    const verdict = classifyHolding(price, position.entryPrice, ma20, heldDays);
     exitCheck.push({
       symbol: position.symbol,
       name: position.name,
