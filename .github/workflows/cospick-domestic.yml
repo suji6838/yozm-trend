@@ -1,0 +1,22 @@
+# 국내 코스픽 매수/매도 알림을 Vercel Hobby 크론보다 이른 시각에 호출한다(Hobby 크론은 1시간
+# 단위 정밀도라 09:10 설정이 09:56에 도착했음). GitHub 예약 실행도 보통 수~수십 분 늦게
+# 시작하므로 목표(09:30 / 14:00 전후)보다 앞당겨 09:10 / 13:40 KST로 예약해 둔다.
+# ?backup=1로 호출해 Vercel 백업 크론과 서로 중복 실행되지 않게 한다(최근 성공 실행이 있으면 skip).
+name: cospick-domestic
+
+on:
+  schedule:
+    - cron: "10 0 * * 1-5" # 09:10 KST
+    - cron: "40 4 * * 1-5" # 13:40 KST
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call refresh-cospick
+        run: |
+          curl -sS --fail-with-body -m 330 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://yozm-trend.vercel.app/api/cron/refresh-cospick?backup=1"

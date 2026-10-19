@@ -10,11 +10,12 @@ import { kstHHmm } from "@/lib/time";
 // 순차 처리하므로 여유있게 설정.
 export const maxDuration = 300;
 
-// 본 실행은 cron-job.org가 09:30/14:00(KST)에 정시 호출한다 — Vercel Hobby 크론은 설정한
-// 시각이 속한 1시간 안 아무 때나 실행돼(09:10 설정 → 09:56 도착) 정시 알림이 안 되기 때문.
-// vercel.json의 국내 크론은 전부 ?backup=1 백업으로만 두고, 최근 이 시간 안에 성공한 실행이
-// 있으면 아무것도 하지 않고 끝난다(외부 호출이 실패한 날에만 대신 실행).
-const SKIP_IF_OK_WITHIN_MS = 3 * 60 * 60 * 1000;
+// 본 실행은 GitHub Actions(.github/workflows/cospick-domestic.yml)가 09:10/13:40(KST)에 예약
+// 호출한다 — Vercel Hobby 크론은 설정한 시각이 속한 1시간 안 아무 때나 실행돼(09:10 설정 →
+// 09:56 도착) 너무 늦기 때문. GitHub 호출과 vercel.json의 국내 크론(백업)은 모두 ?backup=1로
+// 들어오고, 먼저 성공한 쪽이 있으면 나머지는 아무것도 하지 않고 끝난다. 창을 2시간으로 둬서
+// 오전 실행(늦어도 ~11시)이 오후 13:40 실행을 막지 않게 한다.
+const SKIP_IF_OK_WITHIN_MS = 2 * 60 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
