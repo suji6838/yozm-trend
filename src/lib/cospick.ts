@@ -136,6 +136,7 @@ export type CospickCandidate = {
 export type CospickSnapshot = {
   candidates: CospickCandidate[];
   scanned: number;
+  surgeExcluded?: number; // 당일 급등으로 후보에서 뺀 종목 수(이 필드 도입 전 스냅샷엔 없음)
   marketMood: { kospiAboveMa20: boolean; kosdaqAboveMa20: boolean };
   generatedAt: string;
 };
@@ -177,11 +178,13 @@ async function evaluateCandidate(
 }
 
 // 시장별로 거래대금 상위 종목을 스크리닝해 상위 3개(부족하면 주의 종목으로 보충)를 뽑는다.
+// 단, 당일 급등 종목은 보충에도 쓰지 않는다 — 고점 추격 매수를 막기 위해 후보가 3개
+// 미만이 되더라도 아예 뺀다. surgeExcluded는 그렇게 빠진 종목 수.
 async function pickMarketCandidates(
   universe: KisVolumeRankItem[],
   market: "코스피" | "코스닥",
   mood: ReturnType<typeof scoreMarketMood>,
-): Promise<CospickCandidate[]> {
+): Promise<{ picks: CospickCandidate[]; surgeExcluded: number }> {
   const evaluated = await Promise.all(
     universe.map(async (item) => {
       try {
@@ -193,10 +196,14 @@ async function pickMarketCandidates(
     }),
   );
 
-  const results = evaluated.filter((c): c is CospickCandidate => c !== null);
+  const scored = evaluated.filter((c): c is CospickCandidate => c !== null);
+  const results = scored.filter((c) => c.changePct < SURGE_LIMIT_PCT);
   const clean = results.filter((c) => !c.caution).sort((a, b) => b.score.total - a.score.total);
   const risky = results.filter((c) => c.caution).sort((a, b) => b.score.total - a.score.total);
-  return [...clean, ...risky].slice(0, 3);
+  return {
+    picks: [...clean, ...risky].slice(0, 3),
+    surgeExcluded: scored.length - results.length,
+  };
 }
 
 // 코스피/코스닥을 각각 스캔해 3개씩(총 최대 6개) 후보를 뽑는다 — 통합 순위로 뽑으면
@@ -211,14 +218,15 @@ async function buildCospickSnapshot(): Promise<CospickSnapshot> {
 
   const mood = scoreMarketMood(kospiAbove, kosdaqAbove);
 
-  const [kospiPicks, kosdaqPicks] = await Promise.all([
+  const [kospi, kosdaq] = await Promise.all([
     pickMarketCandidates(kospiUniverse, "코스피", mood),
     pickMarketCandidates(kosdaqUniverse, "코스닥", mood),
   ]);
 
   return {
-    candidates: [...kospiPicks, ...kosdaqPicks],
+    candidates: [...kospi.picks, ...kosdaq.picks],
     scanned: kospiUniverse.length + kosdaqUniverse.length,
+    surgeExcluded: kospi.surgeExcluded + kosdaq.surgeExcluded,
     marketMood: { kospiAboveMa20: kospiAbove, kosdaqAboveMa20: kosdaqAbove },
     generatedAt: new Date().toISOString(),
   };

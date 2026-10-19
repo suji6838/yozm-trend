@@ -63,6 +63,7 @@ export type OverseasCospickSnapshot = {
   candidates: OverseasCandidate[];
   exitCheck: OverseasExitItem[];
   scanned: number;
+  surgeExcluded?: number; // 당일 급등으로 후보에서 뺀 종목 수(이 필드 도입 전 스냅샷엔 없음)
   generatedAt: string;
 };
 
@@ -145,7 +146,11 @@ async function buildOverseasSnapshot(): Promise<{
   );
 
   const scanned = evaluated.filter((e): e is NonNullable<typeof e> => e !== null);
-  const results = scanned.map((e) => e.candidate);
+  // 국내판과 같이 당일 급등 종목은 후보가 3개 미만이 되더라도 보충에 쓰지 않는다.
+  const results = scanned
+    .map((e) => e.candidate)
+    .filter((c) => c.changePct < SURGE_LIMIT_PCT);
+  const surgeExcluded = scanned.length - results.length;
   const clean = results.filter((c) => !c.caution).sort((a, b) => b.score.total - a.score.total);
   const risky = results.filter((c) => c.caution).sort((a, b) => b.score.total - a.score.total);
   const candidates = [...clean, ...risky].slice(0, 3);
@@ -219,6 +224,7 @@ async function buildOverseasSnapshot(): Promise<{
       candidates,
       exitCheck,
       scanned: OVERSEAS_UNIVERSE.length,
+      surgeExcluded,
       generatedAt: new Date().toISOString(),
     },
     positions: [...kept, ...added],
