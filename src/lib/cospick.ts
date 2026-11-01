@@ -1,9 +1,10 @@
 import { put, get } from "@vercel/blob";
 import {
   getVolumeRankUniverse,
-  getIndexAboveMa20,
+  getIndexStatus,
   getDailyChart,
   getDailyChartWithPrice,
+  KisIndexStatus,
   KisVolumeRankItem,
 } from "./kis";
 
@@ -23,6 +24,7 @@ const TRADING_VALUE_GOOD = 100_000_000_000; // 1,000억: B 거래대금 가점 �
 // 오른 종목이 계속 추천돼 고점 추격 매수가 되던 문제로 낮춤(해외판도 같은 값 사용).
 export const SURGE_LIMIT_PCT = 5;
 const CRASH_LIMIT_PCT = -7; // 당일 -7% 이하 급락 → 매수금지
+const WATCHLIST_PER_MARKET = 2; // 하락장에서 시장별로 보여줄 관심 종목 수
 
 // 통화 무관 순수 함수라 해외판(cospickOverseas.ts)에서도 그대로 재사용한다.
 export function sma(values: number[], period: number) {
@@ -65,6 +67,21 @@ export function scoreTrend(closes: number[]) {
   }
 
   return { score, reasons };
+}
+
+function trendSignals(closes: number[]) {
+  const last = closes[closes.length - 1];
+  const ma20Now = sma(closes, 20);
+  const dailyReturns = closes.slice(-21).flatMap((close, i, recent) =>
+    i === 0 ? [] : [(close / recent[i - 1] - 1) * 100],
+  );
+  return {
+    aboveMa20: last > ma20Now,
+    aboveMa60: last > sma(closes, 60),
+    ma20Rising: ma20Now > sma(closes.slice(0, -5), 20),
+    return20d: (last / closes[closes.length - 21] - 1) * 100,
+    volatility: Math.sqrt(sma(dailyReturns.map((r) => r * r), dailyReturns.length)),
+  };
 }
 
 function scoreVolume(volumes: number[], tradingValue: number) {
@@ -135,20 +152,25 @@ export type CospickCandidate = {
 
 export type CospickSnapshot = {
   candidates: CospickCandidate[];
+  watchlist?: CospickCandidate[]; // 매수 추천을 쉬는 시장의 관심 종목(보유 추적 안 함, 도입 전 스냅샷엔 없음)
   scanned: number;
+  evaluated?: number; // 차트 조회에 성공한 종목 수(0이면 스캔 실패, 도입 전 스냅샷엔 없음)
   surgeExcluded?: number; // 당일 급등으로 후보에서 뺀 종목 수(이 필드 도입 전 스냅샷엔 없음)
   marketMood: { kospiAboveMa20: boolean; kosdaqAboveMa20: boolean };
   generatedAt: string;
 };
 
-// 급등락/유동성 부족 종목도 차트 데이터가 있으면 점수까지 계산해 반환한다(null은 데이터
-// 조회 자체가 실패한 경우만). 최종 후보가 3개 미만이면 이런 종목을 caution과 함께 보충한다 —
-// 변동성 큰 날 거래대금 상위 종목이 전부 제외돼 매수 후보가 0개로 나오던 문제의 수정.
+type EvaluatedCandidate = {
+  candidate: CospickCandidate;
+  signals: ReturnType<typeof trendSignals>;
+};
+
+// 제외 대상 종목도 차트 데이터가 있으면 평가 결과를 반환한다(null은 데이터 조회 실패만).
 async function evaluateCandidate(
   item: KisVolumeRankItem,
   market: "코스피" | "코스닥",
   mood: ReturnType<typeof scoreMarketMood>,
-): Promise<CospickCandidate | null> {
+): Promise<EvaluatedCandidate | null> {
   const chart = await getDailyChart(item.code, 90);
   if (chart.length < 61) return null;
 
@@ -164,27 +186,42 @@ async function evaluateCandidate(
   if (exclusionReason) reasons.unshift(`⚠️ ${exclusionReason} — 주의 종목`);
 
   return {
-    code: item.code,
-    name: item.name,
-    market,
-    price: item.price,
-    changePct: item.changePct,
-    tradingValueLabel: formatEok(item.tradingValue),
-    trend: closes.slice(-20),
-    score: { trend: trend.score, volume: volume.score, marketMood: mood.score, total },
-    reasons,
-    caution: exclusionReason ?? undefined,
+    candidate: {
+      code: item.code,
+      name: item.name,
+      market,
+      price: item.price,
+      changePct: item.changePct,
+      tradingValueLabel: formatEok(item.tradingValue),
+      trend: closes.slice(-20),
+      score: { trend: trend.score, volume: volume.score, marketMood: mood.score, total },
+      reasons,
+      caution: exclusionReason ?? undefined,
+    },
+    signals: trendSignals(closes),
   };
 }
 
-// 시장별로 거래대금 상위 종목을 스크리닝해 상위 3개(부족하면 주의 종목으로 보충)를 뽑는다.
-// 단, 당일 급등 종목은 보충에도 쓰지 않는다 — 고점 추격 매수를 막기 위해 후보가 3개
-// 미만이 되더라도 아예 뺀다. surgeExcluded는 그렇게 빠진 종목 수.
+function formatPct(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+// 시장별 스크리닝. 2025-12~2026-10 일봉 비교에서 지수가 20일선 아래인 날의 매수는 어떤 종목
+// 선정 규칙으로도 안정적인 우위가 없었고, 쉬는 쪽이 손실을 가장 크게 줄였다. 그래서
+//  - 지수 20일선 위: 20일선 위이면서 제외 사유 없는 종목 중 점수 상위 3개를 추천
+//    (20일선 아래 종목은 보유 규칙상 다음 실행에 바로 매도되므로 추천하지 않는다)
+//  - 지수 20일선 아래: 매수 추천을 쉬고, 지수보다 강한 종목만 변동성 낮은 순으로 관심 종목에 표시
 async function pickMarketCandidates(
   universe: KisVolumeRankItem[],
   market: "코스피" | "코스닥",
   mood: ReturnType<typeof scoreMarketMood>,
-): Promise<{ picks: CospickCandidate[]; surgeExcluded: number }> {
+  index: KisIndexStatus,
+): Promise<{
+  picks: CospickCandidate[];
+  watchlist: CospickCandidate[];
+  evaluated: number;
+  surgeExcluded: number;
+}> {
   const evaluated = await Promise.all(
     universe.map(async (item) => {
       try {
@@ -196,38 +233,63 @@ async function pickMarketCandidates(
     }),
   );
 
-  const scored = evaluated.filter((c): c is CospickCandidate => c !== null);
-  const results = scored.filter((c) => c.changePct < SURGE_LIMIT_PCT);
-  const clean = results.filter((c) => !c.caution).sort((a, b) => b.score.total - a.score.total);
-  const risky = results.filter((c) => c.caution).sort((a, b) => b.score.total - a.score.total);
-  return {
-    picks: [...clean, ...risky].slice(0, 3),
-    surgeExcluded: scored.length - results.length,
-  };
+  const scored = evaluated.filter((e): e is EvaluatedCandidate => e !== null);
+  const eligible = scored.filter((e) => !e.candidate.caution && e.signals.aboveMa20);
+  const surgeExcluded = scored.filter((e) => e.candidate.changePct >= SURGE_LIMIT_PCT).length;
+  const base = { evaluated: scored.length, surgeExcluded };
+
+  if (index.aboveMa20) {
+    const picks = eligible
+      .map((e) => e.candidate)
+      .sort((a, b) => b.score.total - a.score.total)
+      .slice(0, 3);
+    return { ...base, picks, watchlist: [] };
+  }
+
+  const indexReturn = index.return20d;
+  if (indexReturn === null) return { ...base, picks: [], watchlist: [] };
+
+  const watchlist = eligible
+    .filter(
+      (e) =>
+        e.signals.aboveMa60 && e.signals.ma20Rising && e.signals.return20d > indexReturn,
+    )
+    .sort((a, b) => a.signals.volatility - b.signals.volatility)
+    .slice(0, WATCHLIST_PER_MARKET)
+    .map((e) => ({
+      ...e.candidate,
+      reasons: [
+        `지수보다 강함: 20일 ${formatPct(e.signals.return20d)} (${market} ${formatPct(indexReturn)})`,
+        ...e.candidate.reasons,
+      ],
+    }));
+  return { ...base, picks: [], watchlist };
 }
 
 // 코스피/코스닥을 각각 스캔해 3개씩(총 최대 6개) 후보를 뽑는다 — 통합 순위로 뽑으면
 // 거래대금이 큰 코스피가 코스닥 종목을 밀어내던 문제의 수정.
 async function buildCospickSnapshot(): Promise<CospickSnapshot> {
-  const [kospiUniverse, kosdaqUniverse, kospiAbove, kosdaqAbove] = await Promise.all([
+  const [kospiUniverse, kosdaqUniverse, kospiIndex, kosdaqIndex] = await Promise.all([
     getVolumeRankUniverse(15, "0001"),
     getVolumeRankUniverse(15, "1001"),
-    getIndexAboveMa20("0001"),
-    getIndexAboveMa20("1001"),
+    getIndexStatus("0001"),
+    getIndexStatus("1001"),
   ]);
 
-  const mood = scoreMarketMood(kospiAbove, kosdaqAbove);
+  const mood = scoreMarketMood(kospiIndex.aboveMa20, kosdaqIndex.aboveMa20);
 
   const [kospi, kosdaq] = await Promise.all([
-    pickMarketCandidates(kospiUniverse, "코스피", mood),
-    pickMarketCandidates(kosdaqUniverse, "코스닥", mood),
+    pickMarketCandidates(kospiUniverse, "코스피", mood, kospiIndex),
+    pickMarketCandidates(kosdaqUniverse, "코스닥", mood, kosdaqIndex),
   ]);
 
   return {
     candidates: [...kospi.picks, ...kosdaq.picks],
+    watchlist: [...kospi.watchlist, ...kosdaq.watchlist],
     scanned: kospiUniverse.length + kosdaqUniverse.length,
+    evaluated: kospi.evaluated + kosdaq.evaluated,
     surgeExcluded: kospi.surgeExcluded + kosdaq.surgeExcluded,
-    marketMood: { kospiAboveMa20: kospiAbove, kosdaqAboveMa20: kosdaqAbove },
+    marketMood: { kospiAboveMa20: kospiIndex.aboveMa20, kosdaqAboveMa20: kosdaqIndex.aboveMa20 },
     generatedAt: new Date().toISOString(),
   };
 }

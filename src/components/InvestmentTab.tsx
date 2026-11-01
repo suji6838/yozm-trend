@@ -117,10 +117,23 @@ function Sparkline({ values }: { values: number[] }) {
   );
 }
 
-function CandidateCard({ candidate, rank }: { candidate: CospickCandidate; rank: number }) {
+function CandidateCard({
+  candidate,
+  rank,
+  watch = false,
+}: {
+  candidate: CospickCandidate;
+  rank: number;
+  watch?: boolean;
+}) {
   const rising = candidate.changePct >= 0;
   return (
     <article className="flex flex-col gap-3 rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-zinc-200/60">
+      {watch && (
+        <span className="w-fit rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
+          👀 관심 종목 — 매수 신호 아님
+        </span>
+      )}
       {candidate.caution && (
         <span className="w-fit rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-600">
           ⚠️ 주의 종목 — {candidate.caution}
@@ -283,6 +296,8 @@ export default function InvestmentTab({
   }
 
   const { candidates, scanned, marketMood, generatedAt } = cospick;
+  const watchlist = cospick.watchlist ?? [];
+  const bothMarketsDown = !marketMood.kospiAboveMa20 && !marketMood.kosdaqAboveMa20;
 
   return (
     <div className="mt-6">
@@ -292,12 +307,13 @@ export default function InvestmentTab({
           코스픽 · 14시 30분 매수 후보 스크리닝
         </p>
         <h2 className="relative mt-2 text-2xl font-bold text-white sm:text-3xl">
-          거래대금 상위 {scanned}개 중 오늘의 후보를 골랐습니다.
+          거래대금 상위 {scanned}개를 점검했습니다.
         </h2>
         <p className="relative mt-2 max-w-xl text-sm text-blue-100">
           추세·거래량·시장분위기(만점 {COSPICK_SCORE_MAX}점)만 반영한 1단계 버전입니다.
           외국인/기관 수급, 장중 흐름, 뉴스 호재·악재 판별은 아직 반영되지 않았으니 참고용으로만
-          활용해주세요. 급등(+{SURGE_LIMIT_PCT}%↑)·급락(-7%↓)·거래대금 300억 미만 종목은 후보에서 자동 제외됩니다.
+          활용해주세요. 급등(+{SURGE_LIMIT_PCT}%↑)·급락(-7%↓)·거래대금 300억 미만 종목과 20일선
+          아래 종목은 추천하지 않으며, 지수가 20일선 아래인 시장은 신규 매수 추천을 쉽니다.
         </p>
         <div className="relative mt-4 inline-flex flex-wrap items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs text-blue-50">
           <span>코스피 20일선 {marketMood.kospiAboveMa20 ? "위 🟢" : "아래 🔴"}</span>
@@ -319,7 +335,9 @@ export default function InvestmentTab({
 
       {candidates.length === 0 ? (
         <div className="mt-3 rounded-2xl border border-zinc-100 bg-white p-8 text-center text-sm text-zinc-400 shadow-sm">
-          오늘은 조건을 만족하는 매수 후보가 없습니다. 현금 보유를 권장합니다.
+          {bothMarketsDown
+            ? "코스피·코스닥이 모두 20일선 아래라 신규 매수 추천을 쉬고 있습니다. 현금 보유를 권장합니다."
+            : "오늘은 조건을 만족하는 매수 후보가 없습니다. 현금 보유를 권장합니다."}
         </div>
       ) : (
         (["코스피", "코스닥"] as const).map((market) => {
@@ -336,6 +354,19 @@ export default function InvestmentTab({
             </div>
           );
         })
+      )}
+
+      {watchlist.length > 0 && (
+        <div className="mt-6">
+          <p className="text-xs font-semibold text-zinc-500">
+            하락장 관심 종목 {watchlist.length} · 지수보다 강한 종목 (매수 추천·보유 추적 대상 아님)
+          </p>
+          <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {watchlist.map((candidate, i) => (
+              <CandidateCard key={candidate.code} candidate={candidate} rank={i + 1} watch />
+            ))}
+          </div>
+        </div>
       )}
 
       <div className="mt-6 rounded-2xl border border-zinc-100 bg-white p-5 text-xs text-zinc-500 shadow-sm">

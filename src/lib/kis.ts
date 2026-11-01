@@ -347,8 +347,14 @@ export async function getOverseasDailyChart(excd: string, symb: string, count = 
     });
 }
 
-// 코스피(0001)/코스닥(1001) 지수가 20일 이격도 기준으로 20일선 위에 있는지
-export async function getIndexAboveMa20(indexCode: "0001" | "1001") {
+export type KisIndexStatus = {
+  aboveMa20: boolean;
+  return20d: number | null; // 20거래일 수익률(%), 일별 데이터가 부족하면 null
+};
+
+// 코스피(0001)/코스닥(1001) 지수가 20일 이격도 기준으로 20일선 위에 있는지와 20일 수익률.
+// output2는 최신일→과거 순으로 내려온다.
+export async function getIndexStatus(indexCode: "0001" | "1001"): Promise<KisIndexStatus> {
   const data = (await kisFetch(
     "/uapi/domestic-stock/v1/quotations/inquire-index-daily-price",
     "FHPUP02120000",
@@ -358,7 +364,11 @@ export async function getIndexAboveMa20(indexCode: "0001" | "1001") {
       FID_INPUT_ISCD: indexCode,
       FID_INPUT_DATE_1: yyyymmdd(new Date()),
     },
-  )) as { output1: { d20_dsrt: string } };
+  )) as { output1: { d20_dsrt: string }; output2?: { bstp_nmix_prpr: string }[] };
 
-  return Number(data.output1.d20_dsrt) >= 100;
+  const closes = (data.output2 ?? []).map((d) => Number(d.bstp_nmix_prpr)).filter((c) => c > 0);
+  return {
+    aboveMa20: Number(data.output1.d20_dsrt) >= 100,
+    return20d: closes.length > 20 ? (closes[0] / closes[20] - 1) * 100 : null,
+  };
 }

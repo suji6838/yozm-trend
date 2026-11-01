@@ -54,16 +54,25 @@ export async function GET(req: NextRequest) {
 
   const { snapshot, exitItems } = result;
 
+  const { kospiAboveMa20, kosdaqAboveMa20 } = snapshot.marketMood;
+  const watchlist = snapshot.watchlist ?? [];
+  const watchLine =
+    watchlist.length > 0
+      ? `관심 종목(매수 신호 아님): ${watchlist.map((c) => `[${c.market}] ${c.name}`).join(", ")}`
+      : null;
+
   let buySent: boolean;
   if (snapshot.candidates.length === 0) {
-    // 스코어링에 최소 점수 기준이 없어(clean+risky 보충) 후보가 0개인 건 "조건 미달"이
-    // 아니라 전체 종목의 데이터 조회 자체가 실패했거나, 조회된 종목이 전부 당일 급등이라
-    // 제외됐다는 뜻이다 — 둘을 구분해 알린다.
+    // 후보 0개는 스캔 실패, 하락장 매수 쉼, 조건 미달이 각각 다른 뜻이라 구분해 알린다.
+    let summary = "조건 충족 종목 없음 — 현금 보유";
+    if (snapshot.evaluated === 0) {
+      summary = "조건 충족 종목 없음 — 현금 보유 (원인: 스캔 실패로 추정)";
+    } else if (!kospiAboveMa20 && !kosdaqAboveMa20) {
+      summary = "코스피·코스닥 모두 20일선 아래 — 신규 매수 쉼, 현금 보유";
+    }
     buySent = await sendNtfy(
       `코스픽 ${time} 매수 추천`,
-      snapshot.surgeExcluded
-        ? `조건 충족 종목 없음 — 현금 보유 (원인: 급등 종목 ${snapshot.surgeExcluded}개 제외)`
-        : "조건 충족 종목 없음 — 현금 보유 (원인: 스캔 실패로 추정)",
+      [summary, watchLine].filter(Boolean).join("\n"),
     );
   } else {
     const lines = snapshot.candidates.map(
@@ -72,7 +81,10 @@ export async function GET(req: NextRequest) {
           c.changePct >= 0 ? "+" : ""
         }${c.changePct}%) 점수 ${c.score.total}/${COSPICK_SCORE_MAX}`,
     );
-    buySent = await sendNtfy(`코스픽 ${time} 매수 추천`, lines.join("\n"));
+    buySent = await sendNtfy(
+      `코스픽 ${time} 매수 추천`,
+      [...lines, watchLine].filter(Boolean).join("\n"),
+    );
   }
 
   let exitSent: boolean;
