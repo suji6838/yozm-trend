@@ -130,8 +130,7 @@ export const TRENDS: Trend[] = [
 ];
 
 export const DATA_SOURCES: { name: string; connected: boolean }[] = [
-  { name: "네이버 DataLab", connected: true },
-  { name: "네이버 뉴스", connected: true },
+  { name: "Google 뉴스", connected: true },
   { name: "Google Trends", connected: false },
   { name: "Product Hunt", connected: false },
   { name: "Bloomberg", connected: false },

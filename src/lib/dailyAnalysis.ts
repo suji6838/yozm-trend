@@ -1,55 +1,145 @@
 import { put, get } from "@vercel/blob";
 import { CATEGORIES, Category, Trend } from "@/data/trends";
-import { getCandidatePool, getDatalabSearchTrend } from "./naver";
+import {
+  corpusItems,
+  getCandidatePool,
+  getNewsCorpus,
+  GoogleNewsItem,
+  NewsCorpus,
+  NEWS_WINDOW_DAYS,
+} from "./googleNews";
 import { generateWithGemini } from "./gemini";
 import { CATEGORY_CRITERIA } from "./curationCriteria";
 
 const PER_CATEGORY_COUNT = 3;
 
-const DATALAB_CANDIDATE_KEYWORDS: Record<Category, string[]> = {
-  "AI/테크": ["AI", "반도체", "로봇", "클라우드", "챗봇"],
-  "금융": ["코스피", "환율", "금리", "ETF", "비트코인"],
-  "건강/뷰티": ["화장품", "다이어트", "피부관리", "건강식품", "뷰티"],
-  "소비/라이프": ["구독서비스", "1인가구", "친환경", "반려동물", "여행"],
-  "마케팅/비즈니스": ["스타트업", "브랜드", "마케팅", "투자유치", "M&A"],
-};
+const MOMENTUM_KEYWORD_COUNT = 5;
+const MOMENTUM_SAMPLE_TITLES = 60;
+const MOMENTUM_GEMINI_ATTEMPTS = 3;
+const MOMENTUM_RETRY_DELAY_MS = 8000;
 
-function formatDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+// 한국 날짜 기준으로 기사를 일별로 묶는다(Vercel 런타임은 UTC).
+function kstDate(value: Date | string) {
+  const time = new Date(value).getTime() + 9 * 60 * 60 * 1000;
+  return new Date(time).toISOString().slice(0, 10);
 }
 
 type MomentumSeries = { keyword: string; ratios: number[] };
 
-async function getMomentumSeries(): Promise<Record<Category, MomentumSeries[]>> {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - 6);
+const KEYWORD_JSON_SCHEMA = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      category: { type: "string" },
+      keywords: { type: "array", items: { type: "string" } },
+    },
+    required: ["category", "keywords"],
+  },
+};
 
-  const entries = await Promise.all(
-    CATEGORIES.map(async (category) => {
-      try {
-        const result = await getDatalabSearchTrend({
-          startDate: formatDate(start),
-          endDate: formatDate(end),
-          timeUnit: "date",
-          keywordGroups: DATALAB_CANDIDATE_KEYWORDS[category].map((keyword) => ({
-            groupName: keyword,
-            keywords: [keyword],
-          })),
-        });
-        const series = result.results.map((r) => ({
-          keyword: r.title,
-          ratios: r.data.map((d) => Math.round(d.ratio)),
-        }));
-        return [category, series] as const;
-      } catch (error) {
-        console.error(`DataLab momentum lookup failed for ${category}:`, error);
-        return [category, [] as MomentumSeries[]] as const;
-      }
-    }),
+// 최신 기사로 쏠리지 않게 7일치 기사에서 고르게 표본을 뽑는다.
+function sampleTitles(items: GoogleNewsItem[]) {
+  const sorted = [...items].sort(
+    (a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime(),
   );
+  const step = Math.max(1, sorted.length / MOMENTUM_SAMPLE_TITLES);
+  const titles: string[] = [];
+  for (let i = 0; i < sorted.length; i += step) {
+    titles.push(sorted[Math.floor(i)].title);
+  }
+  return titles;
+}
 
-  return Object.fromEntries(entries) as Record<Category, MomentumSeries[]>;
+async function extractMomentumKeywords(
+  corpus: NewsCorpus,
+): Promise<Partial<Record<Category, string[]>>> {
+  const blocks = CATEGORIES.map(
+    (category) =>
+      `### ${category}\n${sampleTitles(corpusItems(corpus, category))
+        .map((title) => `- ${title}`)
+        .join("\n")}`,
+  ).join("\n\n");
+
+  const raw = await generateWithGemini(
+    `아래는 최근 ${NEWS_WINDOW_DAYS}일간의 카테고리별 뉴스 제목이다. 카테고리마다 지금 뜨고 있는 핵심 키워드를 ${MOMENTUM_KEYWORD_COUNT}개씩 뽑아줘.
+- 키워드는 기사 제목에 그대로 나오는 1~2단어 표현만 쓴다(제목에서 글자 그대로 찾을 수 있어야 함).
+- 특정 기사 하나에만 나오는 표현보다 여러 기사에 반복되는 표현을 고른다.
+- "트렌드", "시장", "기업", "오늘"처럼 어디에나 나오는 일반어나 언론사 이름은 제외한다.
+- category는 아래 제목의 카테고리 이름을 그대로 쓴다.
+
+${blocks}`,
+    { jsonSchema: KEYWORD_JSON_SCHEMA },
+  );
+  const parsed = JSON.parse(raw) as { category: string; keywords: string[] }[];
+  return Object.fromEntries(
+    parsed
+      .filter((entry) => (CATEGORIES as string[]).includes(entry.category))
+      .map((entry) => [
+        entry.category,
+        entry.keywords.slice(0, MOMENTUM_KEYWORD_COUNT),
+      ]),
+  );
+}
+
+// 키워드별로 일별 기사 수를 세어, 그 기간 최고치를 100으로 한 비율로 바꾼다.
+function buildMomentumSeries(
+  items: GoogleNewsItem[],
+  keywords: string[],
+): MomentumSeries[] {
+  const days = Array.from({ length: NEWS_WINDOW_DAYS }, (_, i) => {
+    const day = new Date();
+    day.setDate(day.getDate() - (NEWS_WINDOW_DAYS - 1 - i));
+    return kstDate(day);
+  });
+
+  return keywords.flatMap((keyword) => {
+    const needle = keyword.replace(/\s+/g, "").toLowerCase();
+    const counts = days.map(
+      (day) =>
+        items.filter(
+          (item) =>
+            kstDate(item.pubDate) === day &&
+            item.title.replace(/\s+/g, "").toLowerCase().includes(needle),
+        ).length,
+    );
+    const peak = Math.max(...counts);
+    if (peak === 0) return [];
+    return [
+      {
+        keyword,
+        ratios: counts.map((count) => Math.round((count / peak) * 100)),
+      },
+    ];
+  });
+}
+
+export async function getMomentumSeries(
+  corpus: NewsCorpus,
+): Promise<Record<Category, MomentumSeries[]>> {
+  let keywords: Partial<Record<Category, string[]>> = {};
+  // Gemini 503(일시적 과부하)이 잦아서 몇 번 더 시도하고, 끝내 실패하면 모멘텀 없이 진행한다.
+  for (let attempt = 1; attempt <= MOMENTUM_GEMINI_ATTEMPTS; attempt += 1) {
+    try {
+      keywords = await extractMomentumKeywords(corpus);
+      break;
+    } catch (error) {
+      console.error("Momentum keyword extraction failed:", error);
+      if (attempt < MOMENTUM_GEMINI_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, MOMENTUM_RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    CATEGORIES.map((category) => [
+      category,
+      buildMomentumSeries(
+        corpusItems(corpus, category),
+        keywords[category] ?? [],
+      ),
+    ]),
+  ) as Record<Category, MomentumSeries[]>;
 }
 
 function buildMomentumBlock(momentum: Record<Category, MomentumSeries[]>) {
@@ -383,7 +473,7 @@ OpenAI Agent 발표 + Google Agent 확대 + Microsoft Agent 플랫폼 + Anthropi
 기사 제목을 복사하지 말고, "무슨 뉴스가 나왔는가"가 아니라 "어떤 변화가 나타나고 있는가"를 20~35자로 작성.
 예) ❌ "OpenAI 새로운 Agent 발표" / ⭕ "AI Agent, 챗봇에서 실제 업무 수행 단계로 진화"
 
-[카테고리별 데이터랩 모멘텀 참고자료 (최근 7일 검색 비율, 100에 가까울수록 그 기간 내 최고치)]
+[카테고리별 키워드 모멘텀 참고자료 (최근 7일 일별 구글 뉴스 기사 수 비율, 오래된 날짜부터 오늘 순, 100에 가까울수록 그 기간 내 최고치)]
 ${buildMomentumBlock(momentum)}
 
 [최근 사이클에서 이미 "오늘의 트렌드"로 다뤘던 주제 (날짜순)]
@@ -424,7 +514,7 @@ export type DailyAnalysis = {
   generatedAt: string;
 };
 
-// unstable_cache는 이 배포 환경에서 요청 간 재사용이 안 돼(방문마다 Gemini/네이버를
+// unstable_cache는 이 배포 환경에서 요청 간 재사용이 안 돼(방문마다 Gemini/구글 뉴스를
 // 다시 호출) 걷어냄 — cron이 미리 빌드해 Vercel Blob에 저장해두고, 방문자는 그 Blob만
 // 읽는 방식으로 대체.
 const LAST_GOOD_PATHNAME = "daily-analysis-latest.json";
@@ -438,7 +528,7 @@ async function saveAnalysis(analysis: DailyAnalysis) {
   });
 }
 
-// 방문자용 — Gemini/네이버를 직접 부르지 않고 cron이 저장해둔 Blob만 읽는다.
+// 방문자용 — Gemini/구글 뉴스를 직접 부르지 않고 cron이 저장해둔 Blob만 읽는다.
 export async function getDailyAnalysis(): Promise<DailyAnalysis | null> {
   try {
     const result = await get(LAST_GOOD_PATHNAME, { access: "private" });
@@ -456,7 +546,7 @@ export async function getDailyAnalysis(): Promise<DailyAnalysis | null> {
 // 실제 갱신 주기는 이 값으로만 결정된다.
 const REFRESH_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000;
 
-// cron 전용 — 실제로 네이버+Gemini를 호출해 새로 분석하고 Blob에 저장한다.
+// cron 전용 — 실제로 구글 뉴스+Gemini를 호출해 새로 분석하고 Blob에 저장한다.
 // Gemini 호출이 실패(할당량 소진 등)해도, 기존에 저장돼 있던 마지막 성공 결과를
 // 그대로 유지(덮어쓰지 않음)하고 그 값을 반환한다.
 export async function refreshDailyAnalysis(): Promise<DailyAnalysis> {
@@ -466,10 +556,13 @@ export async function refreshDailyAnalysis(): Promise<DailyAnalysis> {
     if (age < REFRESH_INTERVAL_MS) return existing;
   }
 
-  const [pool, momentum, history] = await Promise.all([
-    getCandidatePool(6),
-    getMomentumSeries(),
+  const [corpus, history] = await Promise.all([
+    getNewsCorpus(),
     getTopicHistory(),
+  ]);
+  const [pool, momentum] = await Promise.all([
+    getCandidatePool(corpus, 6),
+    getMomentumSeries(corpus),
   ]);
   const candidates = buildCandidateList(pool);
 

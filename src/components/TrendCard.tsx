@@ -39,9 +39,11 @@ export default function TrendCard({ trend, saved, onToggleSave }: Props) {
               trend.title
             )}
           </h3>
-          <p className="text-sm leading-relaxed text-zinc-500">
-            {trend.summary}
-          </p>
+          {trend.summary ? (
+            <p className="text-sm leading-relaxed text-zinc-500">
+              {trend.summary}
+            </p>
+          ) : null}
         </div>
         <div className="mt-4 flex items-center justify-between border-t border-zinc-50 pt-3">
           <span className="text-xs text-zinc-400">출처 · {trend.source}</span>

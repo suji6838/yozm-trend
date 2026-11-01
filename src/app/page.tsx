@@ -21,7 +21,7 @@ import {
 import { getAdminUser } from "@/lib/adminAuth";
 
 // getDailyAnalysis/getCospickSnapshot/getExitCheck는 각자 cron이 미리 채워둔
-// Vercel Blob만 읽기 때문에(네이버/Gemini/KIS를 직접 호출하지 않음) 항상 빠르다.
+// Vercel Blob만 읽기 때문에(구글 뉴스/Gemini/KIS를 직접 호출하지 않음) 항상 빠르다.
 // 여유를 위해 넉넉하게 설정.
 export const maxDuration = 30;
 

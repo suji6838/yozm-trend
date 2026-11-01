@@ -34,7 +34,7 @@ export function buildDigestEmail(trends: Trend[]) {
           <div style="margin-top:8px;font-size:16px;font-weight:600;color:#111;">
             <a href="${safeHref(t.link)}" style="color:#111;text-decoration:none;">${escapeHtml(t.title)}</a>
           </div>
-          <p style="margin:6px 0 0;font-size:14px;color:#555;line-height:1.5;">${escapeHtml(t.summary)}</p>
+          ${t.summary ? `<p style="margin:6px 0 0;font-size:14px;color:#555;line-height:1.5;">${escapeHtml(t.summary)}</p>` : ""}
           <p style="margin:6px 0 0;font-size:12px;color:#999;">출처 · ${escapeHtml(t.source)}</p>
         </td>
       </tr>`,
